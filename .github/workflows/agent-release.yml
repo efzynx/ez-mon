@@ -1,0 +1,42 @@
+name: Release EZMON Agent
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'apps/agent/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: apps/agent/go.sum
+
+      - name: Build Binaries
+        run: |
+          cd apps/agent
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o ../../ezmon-agent-linux-amd64 .
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-w -s" -o ../../ezmon-agent-linux-arm64 .
+
+      - name: Update "latest" Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: latest
+          name: "EZMON Agent (Latest)"
+          body: "Auto-compiled static binaries for EZMON agent."
+          artifacts: "ezmon-agent-linux-amd64,ezmon-agent-linux-arm64"
+          allowUpdates: true
+          replacesArtifacts: true
+          makeLatest: true

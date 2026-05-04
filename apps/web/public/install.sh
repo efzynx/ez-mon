@@ -101,7 +101,7 @@ elif command -v curl > /dev/null 2>&1; then
     *)       fatal "Arsitektur tidak didukung: $ARCH" ;;
   esac
 
-  BIN_URL="$SERVER_URL/releases/ezmon-agent-linux-$BIN_ARCH"
+  BIN_URL="https://github.com/efzynx/ez-mon/releases/download/latest/ezmon-agent-linux-$BIN_ARCH"
   info "Download binary untuk linux/$BIN_ARCH dari $BIN_URL..."
   curl -fsSL "$BIN_URL" -o /tmp/ezmon-agent-build || fatal "Download gagal. Pastikan binary sudah di-host di $BIN_URL"
 
