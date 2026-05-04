@@ -95,7 +95,7 @@ function InstallModal({
             </div>
             <div className="p-5 bg-zinc-950 relative group flex flex-col gap-4">
               <div className="relative bg-black border border-zinc-800 rounded-md p-4 overflow-x-auto">
-                <pre className="text-sm text-zinc-300 font-mono whitespace-pre"><span className="text-blue-400">curl</span> <span className="text-zinc-400">-fsSL</span> <span className="text-emerald-400">{appUrl}/install.sh</span> <span className="text-zinc-500">|</span> <span className="text-purple-400">EZMON_TOKEN</span><span className="text-zinc-300">=</span><span className="text-orange-300">{projectId}</span> <span className="text-blue-400">sh</span></pre>
+                <pre className="text-sm text-zinc-300 font-mono whitespace-pre"><span className="text-blue-400">curl</span> <span className="text-zinc-400">-fsSL</span> <span className="text-emerald-400">{appUrl}/install.sh</span> <span className="text-zinc-500">|</span> <span className="text-purple-400">EZMON_SERVER_URL</span><span className="text-zinc-300">=</span><span className="text-emerald-400">{appUrl}</span> <span className="text-purple-400">EZMON_TOKEN</span><span className="text-zinc-300">=</span><span className="text-orange-300">{projectId}</span> <span className="text-blue-400">sh</span></pre>
                 <Button
                   size="icon"
                   variant="outline"
