@@ -1,0 +1,45 @@
+# ─── Dependencies ─────────────────────────────────────────────────────────────
+node_modules/
+.pnpm-store/
+
+# ─── Build Output ─────────────────────────────────────────────────────────────
+.next/
+dist/
+out/
+.turbo/
+.wrangler/
+
+# ─── Environment & Secrets ────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+.dev.vars
+apps/worker/.dev.vars
+apps/web/.env.local
+
+# ─── IDE ──────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ─── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── Database Migrations Meta ─────────────────────────────────────────────────
+drizzle/meta/
+
+# ─── Go Agent ─────────────────────────────────────────────────────────────────
+apps/agent/ezmon-agent
+apps/agent/bin/
+apps/agent/*.exe
+
+# ─── Internal Docs (not for public repo) ─────────────────────────────────────
+ezmon-*.md
+docs/
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+pnpm-debug.log*

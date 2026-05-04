@@ -1,0 +1,17 @@
+name = "ezmon-evaluator"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+[dev]
+port = 8787
+
+[triggers]
+crons = ["* * * * *"]
+
+[vars]
+# HUB_URL will be set via wrangler secret or dashboard
+# DATABASE_URL will be set via wrangler secret
+
+# [secrets]
+# DATABASE_URL - Neon connection string
+# WORKER_SECRET - shared secret for hub API auth (optional)

@@ -1,0 +1,23 @@
+{
+  "name": "ezmon",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lightweight self-hostable monitoring hub with push-based agents",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "db:generate": "turbo db:generate",
+    "db:migrate": "turbo db:migrate",
+    "db:push": "turbo db:push",
+    "db:studio": "pnpm --filter @ezmon/db db:studio"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "turbo": "^2.9.8"
+  }
+}
