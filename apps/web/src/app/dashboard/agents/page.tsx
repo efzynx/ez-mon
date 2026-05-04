@@ -36,7 +36,7 @@ function InstallModal({
   const appUrl =
     typeof window !== "undefined" ? window.location.origin : "https://your-hub.vercel.app";
 
-  const installCmd = `curl -fsSL ${appUrl}/install.sh | EZMON_TOKEN=${projectId} sh`;
+  const installCmd = `curl -fsSL ${appUrl}/install.sh | EZMON_SERVER_URL=${appUrl} EZMON_TOKEN=${projectId} sh`;
 
   function copyToClipboard() {
     navigator.clipboard.writeText(installCmd);
