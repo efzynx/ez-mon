@@ -43,3 +43,10 @@ docs/
 *.log
 npm-debug.log*
 pnpm-debug.log*
+
+# ─── Unnecessary Design / Scratch files ───────────────────────────────────────
+rancangan-*.md
+design-system/
+scratch/
+AGENTS.md
+CLAUDE.md
