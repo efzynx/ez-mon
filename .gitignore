@@ -52,3 +52,11 @@ scratch/
 AGENTS.md
 CLAUDE.md
 deploy.md
+# Local agent workflows & scripts (not for repo)
+.agents/
+
+# Test/scratch scripts
+test-db.ts
+test-db.js
+apps/web/test-db.ts
+packages/db/query_test.ts
