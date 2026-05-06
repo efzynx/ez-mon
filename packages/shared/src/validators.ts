@@ -21,6 +21,7 @@ export const heartbeatSchema = z.object({
   seq: z.number().int().nonnegative().optional(),
   version: z.string().optional(),
   uptimeSec: z.number().nonnegative().optional(),
+  publicIp: z.string().optional(),
 });
 
 export type HeartbeatInput = z.infer<typeof heartbeatSchema>;
@@ -30,7 +31,8 @@ export type HeartbeatInput = z.infer<typeof heartbeatSchema>;
 export const metricsSchema = z.object({
   agentId: z.string().uuid("Invalid agent ID"),
   timestamp: z.string().datetime({ offset: true }),
-  cpuPct: z.number().min(0).max(100),
+  cpuPct: z.number().min(0),
+  cpuCores: z.array(z.number().min(0)).optional(),
   memUsedMb: z.number().int().nonnegative(),
   memTotalMb: z.number().int().positive(),
   diskUsedMb: z.number().int().nonnegative(),

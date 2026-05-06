@@ -16,6 +16,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { AgentCharts } from "./AgentCharts";
+import { AgentLocationMap } from "./AgentLocationMap";
 
 export default function AgentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -28,6 +30,7 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
   const [deleting, setDeleting] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
+  const [selectedMetric, setSelectedMetric] = useState<"cpu" | "ram" | "disk" | "load" | "net" | null>(null);
 
   const fetchAgent = useCallback(async () => {
     try {
@@ -189,7 +192,10 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
       {/* Metrics Top Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
         {/* CPU */}
-        <Card className="relative overflow-hidden group hover:border-primary/50 transition-colors">
+        <Card 
+          className={`relative overflow-hidden group hover:border-primary/50 transition-all cursor-pointer ${selectedMetric === 'cpu' ? 'ring-2 ring-primary border-primary/50 bg-primary/5' : ''}`}
+          onClick={() => setSelectedMetric(prev => prev === 'cpu' ? null : 'cpu')}
+        >
           <CardHeader className="pb-2">
             <div className="flex justify-between items-center z-10">
               <CardTitle className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">CPU USAGE</CardTitle>
@@ -210,7 +216,10 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
         </Card>
 
         {/* RAM */}
-        <Card className="relative overflow-hidden group hover:border-primary/50 transition-colors flex flex-col">
+        <Card 
+          className={`relative overflow-hidden group hover:border-primary/50 transition-all flex flex-col cursor-pointer ${selectedMetric === 'ram' ? 'ring-2 ring-primary border-primary/50 bg-primary/5' : ''}`}
+          onClick={() => setSelectedMetric(prev => prev === 'ram' ? null : 'ram')}
+        >
           <CardHeader className="pb-2">
             <div className="flex justify-between items-center z-10">
               <CardTitle className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">RAM USAGE</CardTitle>
@@ -231,7 +240,10 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
         </Card>
 
         {/* Disk */}
-        <Card className="relative overflow-hidden group hover:border-primary/50 transition-colors flex flex-col">
+        <Card 
+          className={`relative overflow-hidden group hover:border-primary/50 transition-all flex flex-col cursor-pointer ${selectedMetric === 'disk' ? 'ring-2 ring-primary border-primary/50 bg-primary/5' : ''}`}
+          onClick={() => setSelectedMetric(prev => prev === 'disk' ? null : 'disk')}
+        >
           <CardHeader className="pb-2">
             <div className="flex justify-between items-center z-10">
               <CardTitle className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">DISK USAGE</CardTitle>
@@ -250,7 +262,10 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
         </Card>
 
         {/* Load Avg */}
-        <Card className="relative overflow-hidden group hover:border-primary/50 transition-colors">
+        <Card 
+          className={`relative overflow-hidden group hover:border-primary/50 transition-all cursor-pointer ${selectedMetric === 'load' ? 'ring-2 ring-primary border-primary/50 bg-primary/5' : ''}`}
+          onClick={() => setSelectedMetric(prev => prev === 'load' ? null : 'load')}
+        >
           <CardHeader className="pb-2">
             <div className="flex justify-between items-center z-10">
               <CardTitle className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">LOAD AVG (1m)</CardTitle>
@@ -271,7 +286,10 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
       </div>
 
       {/* Network Stats */}
-      <Card>
+      <Card 
+        className={`cursor-pointer transition-all hover:border-primary/50 ${selectedMetric === 'net' ? 'ring-2 ring-primary border-primary/50 bg-primary/5' : ''}`}
+        onClick={() => setSelectedMetric(prev => prev === 'net' ? null : 'net')}
+      >
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-xl font-display">Network Traffic</CardTitle>
           <div className="flex items-center gap-4">
@@ -302,7 +320,31 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
           </div>
         </CardContent>
       </Card>
+
+      {/* Location Map */}
+      <AgentLocationMap 
+        lat={agent.lat}
+        lon={agent.lon}
+        country={agent.country}
+        city={agent.city}
+      />
+      
       </div>
+
+      {/* Metrics Detail Modal */}
+      {selectedMetric && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+            onClick={() => setSelectedMetric(null)}
+          />
+          <div className="relative bg-card border border-border rounded-xl w-full max-w-6xl shadow-2xl animate-fade-in overflow-hidden h-[90vh] flex flex-col">
+            <div className="flex-1 overflow-y-auto w-full h-full">
+              <AgentCharts agentId={id} selectedMetric={selectedMetric} onClose={() => setSelectedMetric(null)} />
+            </div>
+          </div>
+        </div>
+      )}
 
     {/* Delete Agent Modal */}
     {showDeleteModal && agent && (

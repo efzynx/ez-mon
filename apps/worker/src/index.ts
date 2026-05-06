@@ -374,6 +374,17 @@ export default {
         }
       }
 
+      // ── STEP 3: Retention Cleanup ──────────────────────────────────────────────────
+      try {
+        await queryNeon(
+          env.DATABASE_URL,
+          `DELETE FROM metric_buckets WHERE bucket_start < NOW() - INTERVAL '7 days'`
+        );
+        console.log(`[evaluator] Retention cleanup complete (7 days)`);
+      } catch (e) {
+        console.error("[evaluator] Retention cleanup error:", e);
+      }
+
       console.log("[evaluator] Evaluation complete");
     } catch (error) {
       console.error("[evaluator] Error:", error);

@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -25,6 +26,41 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/shirou/gopsutil/v4/net"
 )
+
+// ─── Public IP Helper ─────────────────────────────────────────────────────────
+
+var cachedPublicIP string
+
+func getPublicIP() string {
+	if cachedPublicIP != "" {
+		return cachedPublicIP
+	}
+	services := []string{
+		"https://api.ipify.org",
+		"https://icanhazip.com",
+		"https://api4.my-ip.io/ip",
+	}
+	for _, svc := range services {
+		client := &http.Client{Timeout: 5 * time.Second}
+		resp, err := client.Get(svc)
+		if err != nil {
+			continue
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			continue
+		}
+		ip := string(bytes.TrimSpace(body))
+		if ip != "" {
+			cachedPublicIP = ip
+			log.Printf("[agent] Public IP detected: %s", ip)
+			return ip
+		}
+	}
+	log.Printf("[agent] Could not detect public IP")
+	return ""
+}
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -46,20 +82,22 @@ type HeartbeatPayload struct {
 	Seq       int64  `json:"seq"`
 	Version   string `json:"version"`
 	UptimeSec int64  `json:"uptimeSec"`
+	PublicIP  string `json:"publicIp,omitempty"`
 }
 
 type MetricsPayload struct {
-	AgentID           string  `json:"agentId"`
-	Timestamp         string  `json:"timestamp"`
-	CpuPct            float64 `json:"cpuPct"`
-	MemUsedMb         int64   `json:"memUsedMb"`
-	MemTotalMb        int64   `json:"memTotalMb"`
-	DiskUsedMb        int64   `json:"diskUsedMb"`
-	DiskTotalMb       int64   `json:"diskTotalMb"`
-	Load1             float64 `json:"load1,omitempty"`
-	NetRxBps          int64   `json:"netRxBps,omitempty"`
-	NetTxBps          int64   `json:"netTxBps,omitempty"`
-	ContainersRunning int     `json:"containersRunning,omitempty"`
+	AgentID           string    `json:"agentId"`
+	Timestamp         string    `json:"timestamp"`
+	CpuPct            float64   `json:"cpuPct"`
+	CpuCores          []float64 `json:"cpuCores,omitempty"`
+	MemUsedMb         int64     `json:"memUsedMb"`
+	MemTotalMb        int64     `json:"memTotalMb"`
+	DiskUsedMb        int64     `json:"diskUsedMb"`
+	DiskTotalMb       int64     `json:"diskTotalMb"`
+	Load1             float64   `json:"load1,omitempty"`
+	NetRxBps          int64     `json:"netRxBps,omitempty"`
+	NetTxBps          int64     `json:"netTxBps,omitempty"`
+	ContainersRunning int       `json:"containersRunning,omitempty"`
 }
 
 type RegisterRequest struct {
@@ -231,6 +269,7 @@ func sendHeartbeat(cfg Config, seq int64, startTime time.Time) {
 		Seq:       seq,
 		Version:   version,
 		UptimeSec: int64(time.Since(startTime).Seconds()),
+		PublicIP:  getPublicIP(),
 	}
 
 	body, _ := json.Marshal(payload)
@@ -261,10 +300,16 @@ func collectMetrics() (MetricsPayload, error) {
 		DiskTotalMb: 1,
 	}
 
-	// CPU — blocking 1 detik interval untuk akurasi
-	cpuPcts, err := cpu.Percent(1*time.Second, false)
-	if err == nil && len(cpuPcts) > 0 {
-		p.CpuPct = cpuPcts[0]
+	// CPU — single blocking 1-second call with perCPU=true for accurate per-core values
+	cpuCores, err := cpu.Percent(1*time.Second, true)
+	if err == nil && len(cpuCores) > 0 {
+		// Overall average = mean of all cores
+		total := 0.0
+		for _, v := range cpuCores {
+			total += v
+		}
+		p.CpuPct = total / float64(len(cpuCores))
+		p.CpuCores = cpuCores
 	} else {
 		log.Printf("[metrics] CPU read error: %v", err)
 	}

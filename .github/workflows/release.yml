@@ -1,0 +1,182 @@
+name: EZMON Release
+
+# Trigger: setiap push ke main
+# Workflow akan baca versi dari package.json, buat tag jika belum ada,
+# build agent, dan publish release otomatis.
+on:
+  push:
+    branches:
+      - main    # versi stabil
+      - beta    # versi beta/prerelease
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Auto Release
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout full history ────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # diperlukan untuk git log changelog dan tag detection
+
+      # ── 2. Baca versi dari root package.json ───────────────────────────────
+      - name: Read version from package.json
+        id: pkg
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v${VERSION}"
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG"         >> $GITHUB_OUTPUT
+
+          # Deteksi beta: jika versi mengandung '-' (contoh 0.1.2-beta.1)
+          if [[ "$VERSION" == *"-"* ]]; then
+            echo "prerelease=true"   >> $GITHUB_OUTPUT
+            echo "release_type=Beta" >> $GITHUB_OUTPUT
+          else
+            echo "prerelease=false"    >> $GITHUB_OUTPUT
+            echo "release_type=Stable" >> $GITHUB_OUTPUT
+          fi
+
+          echo "Detected version: $VERSION (tag: $TAG)"
+
+      # ── 3. Cek apakah tag sudah ada — skip jika sudah ─────────────────────
+      - name: Check if tag already exists
+        id: check_tag
+        run: |
+          TAG="${{ steps.pkg.outputs.tag }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Tag $TAG already exists — skipping release."
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Tag $TAG is new — proceeding with release."
+          fi
+
+      # ── 4. Buat dan push tag baru ──────────────────────────────────────────
+      - name: Create git tag
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          TAG="${{ steps.pkg.outputs.tag }}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+      # ── 5. Setup Go & Build agent binaries ────────────────────────────────
+      - name: Setup Go
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: apps/agent/go.sum
+
+      - name: Build agent binaries
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          VERSION="${{ steps.pkg.outputs.version }}"
+          cd apps/agent
+
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+            go build -ldflags="-w -s -X main.Version=${VERSION}" \
+            -o ../../ezmon-agent-linux-amd64 .
+
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
+            go build -ldflags="-w -s -X main.Version=${VERSION}" \
+            -o ../../ezmon-agent-linux-arm64 .
+
+          echo "Build complete:"
+          ls -lh ../../ezmon-agent-linux-*
+
+      # ── 6. Ekstrak changelog untuk versi ini dari CHANGELOG.md ─────────────
+      - name: Extract changelog section
+        if: steps.check_tag.outputs.exists == 'false'
+        id: changelog
+        run: |
+          VERSION="${{ steps.pkg.outputs.version }}"
+          CHANGELOG_FILE="CHANGELOG.md"
+
+          if [ -f "$CHANGELOG_FILE" ]; then
+            # Ambil konten antara ## [VERSION] dan ## [ berikutnya
+            SECTION=$(awk "/^## \[${VERSION}\]/{found=1; next} found && /^## \[/{exit} found{print}" "$CHANGELOG_FILE")
+          fi
+
+          if [ -z "$SECTION" ]; then
+            SECTION="No changelog entry found for this version."
+          fi
+
+          # Tulis ke file untuk hindari masalah multiline di GITHUB_OUTPUT
+          echo "$SECTION" > /tmp/changelog_section.txt
+          echo "file=/tmp/changelog_section.txt" >> $GITHUB_OUTPUT
+
+      # ── 7. Bangun release body ─────────────────────────────────────────────
+      - name: Build release body
+        if: steps.check_tag.outputs.exists == 'false'
+        id: body
+        run: |
+          TAG="${{ steps.pkg.outputs.tag }}"
+          VERSION="${{ steps.pkg.outputs.version }}"
+          TYPE="${{ steps.pkg.outputs.release_type }}"
+          CHANGELOG=$(cat /tmp/changelog_section.txt)
+
+          cat > /tmp/release_body.md << EOF
+          ## EZMON ${TYPE} — v${VERSION}
+
+          ### Changelog
+          ${CHANGELOG}
+
+          ---
+
+          ### Install Agent
+
+          **Linux amd64:**
+          \`\`\`bash
+          curl -fsSL https://github.com/${{ github.repository }}/releases/download/${TAG}/ezmon-agent-linux-amd64 -o ezmon-agent && chmod +x ezmon-agent
+          \`\`\`
+
+          **Linux arm64:**
+          \`\`\`bash
+          curl -fsSL https://github.com/${{ github.repository }}/releases/download/${TAG}/ezmon-agent-linux-arm64 -o ezmon-agent && chmod +x ezmon-agent
+          \`\`\`
+
+          > Atau gunakan install script dari dashboard EZMON kamu untuk setup otomatis.
+          EOF
+
+      # ── 8. Publish versioned release ──────────────────────────────────────
+      - name: Create GitHub Release
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.pkg.outputs.tag }}
+          name: "EZMON ${{ steps.pkg.outputs.release_type }} v${{ steps.pkg.outputs.version }}"
+          bodyFile: /tmp/release_body.md
+          artifacts: "ezmon-agent-linux-amd64,ezmon-agent-linux-arm64"
+          prerelease: ${{ steps.pkg.outputs.prerelease }}
+          makeLatest: ${{ steps.pkg.outputs.prerelease == 'false' }}
+          allowUpdates: true
+          replacesArtifacts: true
+
+      # ── 9. Update rolling "latest" release (hanya versi stabil) ───────────
+      - name: Update rolling latest release
+        if: >
+          steps.check_tag.outputs.exists == 'false' &&
+          steps.pkg.outputs.prerelease == 'false'
+        uses: ncipollo/release-action@v1
+        with:
+          tag: latest
+          name: "EZMON Agent (Latest) — v${{ steps.pkg.outputs.version }}"
+          body: |
+            Rolling release — selalu menunjuk ke versi stabil terbaru.
+
+            **Current stable:** v${{ steps.pkg.outputs.version }}
+
+            Download binary atau gunakan install script dari dashboard EZMON kamu.
+          artifacts: "ezmon-agent-linux-amd64,ezmon-agent-linux-arm64"
+          allowUpdates: true
+          replacesArtifacts: true
+          makeLatest: true

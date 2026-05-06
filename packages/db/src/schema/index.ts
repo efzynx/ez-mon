@@ -10,6 +10,7 @@ import {
   bigint,
   index,
   uniqueIndex,
+  json,
 } from "drizzle-orm/pg-core";
 
 // ─── Users ────────────────────────────────────────────────────────────────────
@@ -72,6 +73,10 @@ export const agents = pgTable(
     graceMultiplier: integer("grace_multiplier").notNull().default(3),
     metricsIntervalSec: integer("metrics_interval_sec").notNull().default(60),
     lastIp: text("last_ip"),
+    country: text("country"),
+    city: text("city"),
+    lat: real("lat"),
+    lon: real("lon"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -93,20 +98,21 @@ export const agentState = pgTable("agent_state", {
     .primaryKey()
     .references(() => agents.id, { onDelete: "cascade" }),
   cpuPct: real("cpu_pct"),
+  cpuCores: json("cpu_cores").$type<number[]>(),
   memUsedMb: integer("mem_used_mb"),
   memTotalMb: integer("mem_total_mb"),
   diskUsedMb: integer("disk_used_mb"),
   diskTotalMb: integer("disk_total_mb"),
   load1: real("load_1"),
-  netRxBps: integer("net_rx_bps"),
-  netTxBps: integer("net_tx_bps"),
+  netRxBps: bigint("net_rx_bps", { mode: "number" }),
+  netTxBps: bigint("net_tx_bps", { mode: "number" }),
   containersRunning: integer("containers_running"),
   collectedAt: timestamp("collected_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
 });
 
-// ─── Metric Buckets (5-min Aggregation) ───────────────────────────────────────
+// ─── Metric Buckets (1-min Aggregation) ───────────────────────────────────────
 
 export const metricBuckets = pgTable(
   "metric_buckets",
@@ -116,11 +122,13 @@ export const metricBuckets = pgTable(
       .notNull()
       .references(() => agents.id, { onDelete: "cascade" }),
     bucketStart: timestamp("bucket_start", { withTimezone: true }).notNull(),
-    bucketSizeSec: integer("bucket_size_sec").notNull().default(300),
+    bucketSizeSec: integer("bucket_size_sec").notNull().default(60),
     cpuAvg: real("cpu_avg"),
     cpuMax: real("cpu_max"),
+    cpuCoresAvg: json("cpu_cores_avg").$type<number[]>(),
     memAvg: real("mem_avg"),
     diskAvg: real("disk_avg"),
+    loadAvg: real("load_avg"),
     rxSum: bigint("rx_sum", { mode: "number" }),
     txSum: bigint("tx_sum", { mode: "number" }),
     sampleCount: integer("sample_count").notNull().default(0),

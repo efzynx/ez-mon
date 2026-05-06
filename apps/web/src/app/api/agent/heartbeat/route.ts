@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { agentId, timestamp, version } = parsed.data;
+    const { agentId, timestamp, version, publicIp: agentPublicIp } = parsed.data;
 
     // Verify agent token
     const agentResult = await db()
@@ -63,6 +63,37 @@ export async function POST(req: NextRequest) {
       req.headers.get("x-real-ip") ||
       null;
 
+    // Geo: prefer Vercel headers, else use agent-reported public IP for lookup
+    let country = req.headers.get("x-vercel-ip-country") || agent.country;
+    let city = req.headers.get("x-vercel-ip-city") || agent.city;
+    let latStr = req.headers.get("x-vercel-ip-latitude");
+    let lonStr = req.headers.get("x-vercel-ip-longitude");
+    let lat = latStr ? parseFloat(latStr) : agent.lat;
+    let lon = lonStr ? parseFloat(lonStr) : agent.lon;
+
+    // Use the agent's self-reported public IP for geo lookup (works for localhost too)
+    const geoTargetIp = agentPublicIp || clientIp;
+    const isLocalhost = !geoTargetIp || geoTargetIp === "127.0.0.1" || geoTargetIp === "::1" || geoTargetIp.startsWith("192.168.") || geoTargetIp.startsWith("10.");
+    const ipChanged = geoTargetIp !== agent.lastIp && geoTargetIp !== null;
+    const needsGeo = !country || lat === null || ipChanged;
+
+    if (needsGeo && !isLocalhost && !req.headers.get("x-vercel-ip-country")) {
+      try {
+        const geoRes = await fetch(`http://ip-api.com/json/${geoTargetIp}?fields=status,countryCode,city,lat,lon`);
+        if (geoRes.ok) {
+          const geoData = await geoRes.json();
+          if (geoData.status === "success") {
+            country = geoData.countryCode || country;
+            city = geoData.city || city;
+            lat = geoData.lat !== undefined ? geoData.lat : lat;
+            lon = geoData.lon !== undefined ? geoData.lon : lon;
+          }
+        }
+      } catch (e) {
+        console.error("[heartbeat] IP geolocation fallback failed:", e);
+      }
+    }
+
     // Update agent state
     await db()
       .update(agents)
@@ -71,6 +102,10 @@ export async function POST(req: NextRequest) {
         offlineDeadlineAt: newDeadline,
         status: AGENT_STATUS.ONLINE,
         lastIp: clientIp,
+        country,
+        city,
+        lat,
+        lon,
         version: version ?? agent.version,
         updatedAt: new Date(),
       })

@@ -38,6 +38,7 @@ apps/agent/*.exe
 # ─── Internal Docs (not for public repo) ─────────────────────────────────────
 ezmon-*.md
 docs/
+DEVELOPMENT.md
 
 # ─── Logs ─────────────────────────────────────────────────────────────────────
 *.log

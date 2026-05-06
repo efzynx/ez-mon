@@ -35,6 +35,8 @@ export async function POST(req: NextRequest) {
     const parsed = metricsSchema.safeParse(body);
 
     if (!parsed.success) {
+      console.error("[agent/metrics] Validation Error:", JSON.stringify(parsed.error.errors));
+      console.error("[agent/metrics] Body received:", JSON.stringify(body));
       return NextResponse.json(
         { success: false, error: parsed.error.errors[0]?.message ?? "Invalid payload" },
         { status: 400 }
@@ -65,6 +67,7 @@ export async function POST(req: NextRequest) {
       .values({
         agentId: data.agentId,
         cpuPct: data.cpuPct,
+        cpuCores: data.cpuCores ?? null,
         memUsedMb: data.memUsedMb,
         memTotalMb: data.memTotalMb,
         diskUsedMb: data.diskUsedMb,
@@ -79,6 +82,7 @@ export async function POST(req: NextRequest) {
         target: agentState.agentId,
         set: {
           cpuPct: data.cpuPct,
+          cpuCores: data.cpuCores ?? null,
           memUsedMb: data.memUsedMb,
           memTotalMb: data.memTotalMb,
           diskUsedMb: data.diskUsedMb,
@@ -91,22 +95,26 @@ export async function POST(req: NextRequest) {
         },
       });
 
-    // 2. Aggregate into metric bucket (5-minute)
+    // 2. Aggregate into metric bucket (1-minute)
     const bucketStart = getBucketStart(collectedAt, DEFAULTS.BUCKET_SIZE_SEC);
+    const cpuCoresJson = data.cpuCores ? JSON.stringify(data.cpuCores) : null;
 
     // Use raw SQL for the upsert with incremental aggregation
     await db().execute(sql`
-      INSERT INTO metric_buckets (id, agent_id, bucket_start, bucket_size_sec, cpu_avg, cpu_max, mem_avg, disk_avg, rx_sum, tx_sum, sample_count)
+      INSERT INTO metric_buckets (id, agent_id, bucket_start, bucket_size_sec, cpu_avg, cpu_max, cpu_cores_avg, mem_avg, disk_avg, load_avg, rx_sum, tx_sum, sample_count)
       VALUES (gen_random_uuid(), ${data.agentId}, ${bucketStart}, ${DEFAULTS.BUCKET_SIZE_SEC},
-              ${data.cpuPct}, ${data.cpuPct},
+              ${data.cpuPct}, ${data.cpuPct}, ${cpuCoresJson}::json,
               ${(data.memUsedMb / data.memTotalMb) * 100},
               ${(data.diskUsedMb / data.diskTotalMb) * 100},
+              ${data.load1 ?? 0},
               ${data.netRxBps ?? 0}, ${data.netTxBps ?? 0}, 1)
       ON CONFLICT (agent_id, bucket_start, bucket_size_sec) DO UPDATE SET
         cpu_avg = (metric_buckets.cpu_avg * metric_buckets.sample_count + ${data.cpuPct}) / (metric_buckets.sample_count + 1),
         cpu_max = GREATEST(metric_buckets.cpu_max, ${data.cpuPct}),
+        cpu_cores_avg = ${cpuCoresJson}::json,
         mem_avg = (metric_buckets.mem_avg * metric_buckets.sample_count + ${(data.memUsedMb / data.memTotalMb) * 100}) / (metric_buckets.sample_count + 1),
         disk_avg = (metric_buckets.disk_avg * metric_buckets.sample_count + ${(data.diskUsedMb / data.diskTotalMb) * 100}) / (metric_buckets.sample_count + 1),
+        load_avg = (COALESCE(metric_buckets.load_avg, 0) * metric_buckets.sample_count + ${data.load1 ?? 0}) / (metric_buckets.sample_count + 1),
         rx_sum = metric_buckets.rx_sum + ${data.netRxBps ?? 0},
         tx_sum = metric_buckets.tx_sum + ${data.netTxBps ?? 0},
         sample_count = metric_buckets.sample_count + 1

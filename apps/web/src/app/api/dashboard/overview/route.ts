@@ -104,6 +104,10 @@ export async function GET(req: NextRequest) {
         heartbeatIntervalSec: row.agent.heartbeatIntervalSec,
         graceMultiplier: row.agent.graceMultiplier,
         createdAt: row.agent.createdAt.toISOString(),
+        country: row.agent.country,
+        city: row.agent.city,
+        lat: row.agent.lat,
+        lon: row.agent.lon,
         state: row.state
           ? {
               cpuPct: row.state.cpuPct,

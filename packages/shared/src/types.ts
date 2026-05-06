@@ -41,6 +41,10 @@ export interface DashboardAgent {
   heartbeatIntervalSec: number;
   graceMultiplier: number;
   createdAt: string;
+  country: string | null;
+  city: string | null;
+  lat: number | null;
+  lon: number | null;
   state?: AgentStateSnapshot | null;
 }
 
