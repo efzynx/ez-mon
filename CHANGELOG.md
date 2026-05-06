@@ -5,6 +5,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.1-beta.1] - 2026-05-07
+
+### Added
+- Granular per-core CPU charts (dynamic, supports 64+ cores via HSL color generator)
+- IP-based agent geolocation via ipify.org + ip-api.com
+- Interactive world map with zoom/pan, country hover tooltip, and agent location pin
+- Extended time range selector: 5m, 10m, 30m, 1h, custom (min 5m, max 7d)
+- Automated release workflow: single `release.yml` handles tag creation, agent build, and GitHub Release publication
+- `CHANGELOG.md` and `DEVELOPMENT.md` added to project
+
+### Changed
+- CPU collection switched to blocking per-core call for accurate real-time data
+- Heartbeat payload includes `publicIp` field
+- `cpuCoresAvg` stored as JSON array in `metric_buckets`
+- Release workflow unified: `agent-release.yml` removed, replaced by `release.yml`
+
+### Fixed
+- Map tooltip showing "Unknown (undefined)" for territories without geo ID
+- Tooltip position clipped at top/right edge of map
+- Missing ISO numeric codes for Serbia, Montenegro, Iceland, South Sudan, Oman, and others
+
+---
+
 ## [0.1.1] - 2026-05-07
 
 ### Added

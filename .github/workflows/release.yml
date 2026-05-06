@@ -101,18 +101,32 @@ jobs:
           VERSION="${{ steps.pkg.outputs.version }}"
           CHANGELOG_FILE="CHANGELOG.md"
 
+          # Escape karakter regex: titik dan strip jadi literal
+          ESCAPED=$(echo "$VERSION" | sed 's/\./\\./g; s/-/\\-/g')
+
+          # Coba cari section untuk versi exact (misal 0.1.1-beta.1)
+          SECTION=""
           if [ -f "$CHANGELOG_FILE" ]; then
-            # Ambil konten antara ## [VERSION] dan ## [ berikutnya
-            SECTION=$(awk "/^## \[${VERSION}\]/{found=1; next} found && /^## \[/{exit} found{print}" "$CHANGELOG_FILE")
+            SECTION=$(awk "/^## \[${ESCAPED}\]/{found=1; next} found && /^## \[/{exit} found{print}" "$CHANGELOG_FILE")
+          fi
+
+          # Fallback: jika beta/prerelease, cari base version (0.1.1-beta.1 → 0.1.1)
+          if [ -z "$SECTION" ] && [[ "$VERSION" == *"-"* ]]; then
+            BASE_VERSION="${VERSION%%-*}"
+            BASE_ESCAPED=$(echo "$BASE_VERSION" | sed 's/\./\\./g')
+            if [ -f "$CHANGELOG_FILE" ]; then
+              SECTION=$(awk "/^## \[${BASE_ESCAPED}\]/{found=1; next} found && /^## \[/{exit} found{print}" "$CHANGELOG_FILE")
+            fi
+            if [ -n "$SECTION" ]; then
+              SECTION="*(Changelog dari base version ${BASE_VERSION})*"$'\n'"$SECTION"
+            fi
           fi
 
           if [ -z "$SECTION" ]; then
-            SECTION="No changelog entry found for this version."
+            SECTION="No changelog entry found for v${VERSION}. Please update CHANGELOG.md."
           fi
 
-          # Tulis ke file untuk hindari masalah multiline di GITHUB_OUTPUT
           echo "$SECTION" > /tmp/changelog_section.txt
-          echo "file=/tmp/changelog_section.txt" >> $GITHUB_OUTPUT
 
       # ── 7. Bangun release body ─────────────────────────────────────────────
       - name: Build release body
