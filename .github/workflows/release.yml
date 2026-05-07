@@ -80,18 +80,23 @@ jobs:
         if: steps.check_tag.outputs.exists == 'false'
         run: |
           VERSION="${{ steps.pkg.outputs.version }}"
+          TAG="${{ steps.pkg.outputs.tag }}"
           cd apps/agent
 
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
             go build -ldflags="-w -s -X main.Version=${VERSION}" \
-            -o ../../ezmon-agent-linux-amd64 .
+            -o ../../ezmon-agent-linux-amd64-${TAG} .
 
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
             go build -ldflags="-w -s -X main.Version=${VERSION}" \
-            -o ../../ezmon-agent-linux-arm64 .
+            -o ../../ezmon-agent-linux-arm64-${TAG} .
 
           echo "Build complete:"
           ls -lh ../../ezmon-agent-linux-*
+
+          # Also create unversioned copies for the rolling latest release (used by install.sh)
+          cp ../../ezmon-agent-linux-amd64-${TAG} ../../ezmon-agent-linux-amd64
+          cp ../../ezmon-agent-linux-arm64-${TAG} ../../ezmon-agent-linux-arm64
 
       # ── 6. Ekstrak changelog untuk versi ini dari CHANGELOG.md ─────────────
       - name: Extract changelog section
@@ -150,12 +155,12 @@ jobs:
 
           **Linux amd64:**
           \`\`\`bash
-          curl -fsSL https://github.com/${{ github.repository }}/releases/download/${TAG}/ezmon-agent-linux-amd64 -o ezmon-agent && chmod +x ezmon-agent
+          curl -fsSL https://github.com/${{ github.repository }}/releases/download/${TAG}/ezmon-agent-linux-amd64-${TAG} -o ezmon-agent && chmod +x ezmon-agent
           \`\`\`
 
           **Linux arm64:**
           \`\`\`bash
-          curl -fsSL https://github.com/${{ github.repository }}/releases/download/${TAG}/ezmon-agent-linux-arm64 -o ezmon-agent && chmod +x ezmon-agent
+          curl -fsSL https://github.com/${{ github.repository }}/releases/download/${TAG}/ezmon-agent-linux-arm64-${TAG} -o ezmon-agent && chmod +x ezmon-agent
           \`\`\`
 
           > Atau gunakan install script dari dashboard EZMON kamu untuk setup otomatis.
@@ -169,7 +174,7 @@ jobs:
           tag: ${{ steps.pkg.outputs.tag }}
           name: "EZMON ${{ steps.pkg.outputs.release_type }} v${{ steps.pkg.outputs.version }}"
           bodyFile: /tmp/release_body.md
-          artifacts: "ezmon-agent-linux-amd64,ezmon-agent-linux-arm64"
+          artifacts: "ezmon-agent-linux-amd64-${{ steps.pkg.outputs.tag }},ezmon-agent-linux-arm64-${{ steps.pkg.outputs.tag }},ezmon-agent-linux-amd64,ezmon-agent-linux-arm64"
           prerelease: ${{ steps.pkg.outputs.prerelease }}
           makeLatest: ${{ steps.pkg.outputs.prerelease == 'false' }}
           allowUpdates: true
@@ -185,11 +190,11 @@ jobs:
           tag: latest
           name: "EZMON Agent (Latest) — v${{ steps.pkg.outputs.version }}"
           body: |
-            Rolling release — selalu menunjuk ke versi stabil terbaru.
+            Rolling release — always points to the latest stable version.
 
             **Current stable:** v${{ steps.pkg.outputs.version }}
 
-            Download binary atau gunakan install script dari dashboard EZMON kamu.
+            Download the binary or use the install script from your EZMON dashboard for automatic setup.
           artifacts: "ezmon-agent-linux-amd64,ezmon-agent-linux-arm64"
           allowUpdates: true
           replacesArtifacts: true

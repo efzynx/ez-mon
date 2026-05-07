@@ -119,14 +119,16 @@ type RegisterResponse struct {
 	} `json:"data"`
 }
 
-const version = "0.1.0"
+// Version is set at build time via: go build -ldflags="-X main.Version=x.y.z"
+// Defaults to "dev" for local builds without ldflags.
+var Version = "dev"
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 func main() {
 	cfg := loadConfig()
 
-	log.Printf("[ezmon-agent] Starting v%s", version)
+	log.Printf("[ezmon-agent] Starting v%s", Version)
 	log.Printf("[ezmon-agent] Server: %s", cfg.ServerURL)
 
 	// Register jika belum punya Agent ID
@@ -228,7 +230,7 @@ func register(cfg *Config) error {
 		Hostname:     hostname,
 		OS:           runtime.GOOS,
 		Arch:         runtime.GOARCH,
-		Version:      version,
+		Version:      Version,
 		Name:         name,
 	}
 
@@ -267,7 +269,7 @@ func sendHeartbeat(cfg Config, seq int64, startTime time.Time) {
 		AgentID:   cfg.AgentID,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 		Seq:       seq,
-		Version:   version,
+		Version:   Version,
 		UptimeSec: int64(time.Since(startTime).Seconds()),
 		PublicIP:  getPublicIP(),
 	}

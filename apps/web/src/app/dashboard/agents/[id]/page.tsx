@@ -378,15 +378,15 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
           <div className="p-6 space-y-5">
             {/* Warning */}
             <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-4 text-sm text-destructive/90 leading-relaxed">
-              Ini akan <strong>menghapus permanen</strong> agent dari dashboard beserta semua data terkait:{" "}
+              This will <strong>permanently delete</strong> the agent from the dashboard along with all associated data:{" "}
               <span className="font-mono text-xs">incidents, metrics, alert_events</span>.{" "}
-              Agent yang masih berjalan di server <strong>tidak akan otomatis berhenti</strong> — harus dihentikan manual.
+              The agent process still running on the server <strong>will not stop automatically</strong> — it must be stopped manually.
             </div>
 
             {/* Uninstall steps */}
             <div>
               <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3">
-                Cara menghapus agent dari server Linux:
+                How to remove the agent from your Linux server:
               </p>
               <div className="space-y-2">
                 {[

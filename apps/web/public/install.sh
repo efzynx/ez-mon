@@ -123,9 +123,10 @@ info "Mendaftarkan agent ke hub..."
 OS_NAME=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH_NAME=$(uname -m)
 
+AGENT_VERSION="${EZMON_AGENT_VERSION:-0.1.1}"
 REG_RESPONSE=$(curl -s -X POST "$SERVER_URL/api/agent/register" \
   -H "Content-Type: application/json" \
-  -d "{\"projectToken\":\"$EZMON_TOKEN\",\"hostname\":\"$(hostname)\",\"os\":\"$OS_NAME\",\"arch\":\"$ARCH_NAME\",\"version\":\"0.1.0\",\"name\":\"$AGENT_NAME\"}" 2>&1)
+  -d "{\"projectToken\":\"$EZMON_TOKEN\",\"hostname\":\"$(hostname)\",\"os\":\"$OS_NAME\",\"arch\":\"$ARCH_NAME\",\"version\":\"$AGENT_VERSION\",\"name\":\"$AGENT_NAME\"}" 2>&1)
 
 SUCCESS=$(echo "$REG_RESPONSE" | grep -o '"success":true' || true)
 [ -z "$SUCCESS" ] && fatal "Registrasi gagal: $REG_RESPONSE"

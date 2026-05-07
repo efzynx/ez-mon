@@ -5,6 +5,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.2-beta.1] - 2026-05-07
+
+### Added
+- Versioned agent binary names in GitHub Releases: `ezmon-agent-linux-amd64-v{version}` and `ezmon-agent-linux-arm64-v{version}`.
+- Both versioned and unversioned binary copies uploaded per release: versioned for direct download, unversioned for `install.sh` compatibility via rolling `latest` release.
+
+### Changed
+- Agent `Version` variable changed from `const` to `var` to allow linker injection via `-ldflags="-X main.Version=x.y.z"` at build time.
+- Agent `Version` default fallback changed from a hardcoded version string to `"dev"` to clearly distinguish local builds from production binaries.
+- `apps/web/package.json` version bumped to stay in sync with root `package.json`.
+- Delete agent modal text translated from Indonesian to English (warning message and uninstall steps heading).
+- `install.sh` registration call no longer hardcodes agent version; now reads from `EZMON_AGENT_VERSION` env var (defaults to current release version).
+- Release workflow build step now also creates unversioned binary copies alongside versioned ones.
+- Rolling `latest` release description translated to English.
+
+### Fixed
+- Sidebar version badge showing `v0.1.0` instead of the current version — now reads from `apps/web/package.json` which is kept in sync with root.
+- Agent binary in GitHub Releases had no version in the filename, making it hard to identify which version was downloaded.
+- Hardcoded `"0.1.0"` version string in `install.sh` curl registration payload.
+
+---
+
 ## [0.1.1-beta.1] - 2026-05-07
 
 ### Added
