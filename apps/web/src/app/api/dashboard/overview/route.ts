@@ -108,6 +108,8 @@ export async function GET(req: NextRequest) {
         city: row.agent.city,
         lat: row.agent.lat,
         lon: row.agent.lon,
+        showOnStatusPage: row.agent.showOnStatusPage,
+        tags: row.agent.tags as string[] | null,
         state: row.state
           ? {
               cpuPct: row.state.cpuPct,

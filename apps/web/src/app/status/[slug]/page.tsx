@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { projects, agents, incidents, eq, and } from "@ezmon/db";
+import { projects, agents, incidents, statusPages, eq, and } from "@ezmon/db";
 import { computeDerivedStatus, INCIDENT_STATUS } from "@ezmon/shared";
 import { notFound } from "next/navigation";
 
@@ -15,9 +15,18 @@ export default async function PublicStatusPage({ params }: { params: Promise<{ s
   if (project.length === 0) notFound();
 
   const projectData = project[0];
-  const agentRows = await db().select().from(agents).where(eq(agents.projectId, projectData.id));
-  const openIncidents = await db().select().from(incidents)
+
+  const pageConfig = await db().select().from(statusPages).where(eq(statusPages.projectId, projectData.id)).limit(1);
+  if (pageConfig.length === 0 || !pageConfig[0].published) notFound();
+  const statusPage = pageConfig[0];
+
+  const agentRows = await db().select().from(agents).where(and(eq(agents.projectId, projectData.id), eq(agents.showOnStatusPage, true)));
+  const allOpenIncidents = await db().select().from(incidents)
     .where(and(eq(incidents.projectId, projectData.id), eq(incidents.status, INCIDENT_STATUS.OPEN)));
+  
+  const agentIds = new Set(agentRows.map(a => a.id));
+  const openIncidents = allOpenIncidents.filter(inc => agentIds.has(inc.agentId));
+
 
   const agentStatuses = agentRows.map((a) => ({
     name: a.name,
@@ -49,8 +58,10 @@ export default async function PublicStatusPage({ params }: { params: Promise<{ s
   return (
     <div className="min-h-screen px-4 py-16 max-w-2xl mx-auto font-sans bg-background text-foreground">
       <div className="text-center mb-10">
-        <h1 className="text-4xl font-display font-bold tracking-tight mb-2 text-foreground">{projectData.name}</h1>
-        <p className="text-sm font-medium text-muted-foreground uppercase tracking-widest">System Status</p>
+        <h1 className="text-4xl font-display font-bold tracking-tight mb-2 text-foreground">{statusPage.title}</h1>
+        {statusPage.description && (
+          <p className="text-sm font-medium text-muted-foreground mt-3 max-w-xl mx-auto">{statusPage.description}</p>
+        )}
       </div>
 
       <Card className={`mb-8 border-2 ${statusColorClass} bg-card/50 backdrop-blur-sm shadow-lg transition-colors`}>

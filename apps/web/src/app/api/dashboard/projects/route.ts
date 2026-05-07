@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { projects, eq } from "@ezmon/db";
+import { projects, eq, and } from "@ezmon/db";
 import { createProjectSchema } from "@ezmon/shared";
 
 export async function GET() {
@@ -81,6 +81,39 @@ export async function POST(req: NextRequest) {
     );
   } catch (error) {
     console.error("[dashboard/projects] POST Error:", error);
+    return NextResponse.json(
+      { success: false, error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const body = await req.json();
+    if (!body.projectId) {
+      return NextResponse.json({ success: false, error: "Project ID required" }, { status: 400 });
+    }
+
+    if (body.tags && Array.isArray(body.tags)) {
+      await db()
+        .update(projects)
+        .set({ tags: body.tags })
+        .where(and(eq(projects.id, body.projectId), eq(projects.userId, session.user.id)));
+      return NextResponse.json({ success: true });
+    }
+
+    return NextResponse.json({ success: false, error: "Invalid payload" }, { status: 400 });
+  } catch (error) {
+    console.error("[dashboard/projects] PATCH Error:", error);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 }

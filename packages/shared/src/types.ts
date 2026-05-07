@@ -45,8 +45,11 @@ export interface DashboardAgent {
   city: string | null;
   lat: number | null;
   lon: number | null;
+  showOnStatusPage: boolean;
+  tags?: string[] | null;
   state?: AgentStateSnapshot | null;
 }
+
 
 export interface AgentStateSnapshot {
   cpuPct: number | null;
@@ -81,6 +84,17 @@ export interface DashboardIncident {
   startedAt: string;
   resolvedAt: string | null;
 }
+
+export interface DashboardStatusPage {
+  id: string;
+  projectId: string;
+  title: string;
+  description: string | null;
+  published: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
 

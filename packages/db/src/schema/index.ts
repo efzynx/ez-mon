@@ -40,6 +40,7 @@ export const projects = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    tags: json("tags").$type<string[]>(),
   },
   (table) => [
     index("idx_projects_user_id").on(table.userId),
@@ -77,6 +78,8 @@ export const agents = pgTable(
     city: text("city"),
     lat: real("lat"),
     lon: real("lon"),
+    showOnStatusPage: boolean("show_on_status_page").notNull().default(true),
+    tags: json("tags").$type<string[]>(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -220,3 +223,28 @@ export const alertEvents = pgTable(
     index("idx_alert_events_incident").on(table.incidentId),
   ]
 );
+
+// ─── Status Pages ─────────────────────────────────────────────────────────────
+
+export const statusPages = pgTable(
+  "status_pages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    title: text("title").notNull().default("System Status"),
+    description: text("description"),
+    published: boolean("published").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("idx_status_pages_project").on(table.projectId),
+  ]
+);
+

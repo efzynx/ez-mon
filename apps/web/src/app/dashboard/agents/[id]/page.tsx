@@ -8,7 +8,7 @@
 
 import { useEffect, useState, useCallback, use } from "react";
 import { useRouter } from "next/navigation";
-import { Server, Activity, MemoryStick, HardDrive, Cpu, Terminal, ArrowLeft, RefreshCw, Clock, Trash2, Loader2, X, AlertTriangle, Copy, Check } from "lucide-react";
+import { Server, Activity, MemoryStick, HardDrive, Cpu, Terminal, ArrowLeft, RefreshCw, Clock, Trash2, Loader2, X, AlertTriangle, Copy, Check, Box, Tags, Plus } from "lucide-react";
 import Link from "next/link";
 import type { DashboardOverview, DashboardAgent } from "@ezmon/shared";
 
@@ -31,6 +31,10 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
   const [selectedMetric, setSelectedMetric] = useState<"cpu" | "ram" | "disk" | "load" | "net" | null>(null);
+  
+  const [showTagsModal, setShowTagsModal] = useState(false);
+  const [editingTags, setEditingTags] = useState("");
+  const [savingTags, setSavingTags] = useState(false);
 
   const fetchAgent = useCallback(async () => {
     try {
@@ -85,6 +89,30 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
     } catch {
       alert("Network error");
       setDeleting(false);
+    }
+  }
+
+  async function handleSaveTags() {
+    if (!agent) return;
+    setSavingTags(true);
+    const tagsArray = editingTags.split(",").map(t => t.trim()).filter(t => t.length > 0);
+    try {
+      const res = await fetch(`/api/dashboard/agents`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId: id, tags: tagsArray })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAgent({ ...agent, tags: tagsArray });
+        setShowTagsModal(false);
+      } else {
+        alert(data.error || "Failed to update tags");
+      }
+    } catch {
+      alert("Network error");
+    } finally {
+      setSavingTags(false);
     }
   }
 
@@ -179,12 +207,36 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
             <span className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Version:</span>
             <span className="font-mono text-foreground text-sm">v{agent.version || '0.0.0'}</span>
           </div>
+          {agent.state?.containersRunning !== undefined && agent.state?.containersRunning !== null && (
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Docker:</span>
+              <span className="font-mono text-blue-400 font-bold text-sm flex items-center gap-1.5">
+                <Box size={14} className="text-blue-500"/>
+                {agent.state.containersRunning} Running
+              </span>
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <span className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Last Seen:</span>
             <span className="font-mono text-foreground text-sm flex items-center gap-1.5">
               <Clock size={14} className="text-muted-foreground"/>
               {agent.lastSeenAt ? new Date(agent.lastSeenAt).toLocaleTimeString() : 'Never'}
             </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Tags:</span>
+            <div className="flex items-center gap-1.5">
+              {agent.tags && agent.tags.length > 0 ? (
+                agent.tags.map(tag => (
+                  <Badge key={tag} variant="secondary" className="text-[10px] bg-muted px-1.5 py-0 h-5 text-muted-foreground border-border flex items-center gap-1">
+                    <Tags size={10} className="text-muted-foreground/70" />
+                    {tag}
+                  </Badge>
+                ))
+              ) : (
+                <span className="text-xs text-muted-foreground italic">No tags</span>
+              )}
+            </div>
           </div>
         </div>
       </div>

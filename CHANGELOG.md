@@ -5,6 +5,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.2-beta.2] - 2026-05-07
+
+### Added
+- **Public Status Page**: Added a customizable public status page with themes, descriptions, and manual agent visibility toggling.
+- **Docker Collector**: The Go Agent now collects the count of running Docker containers using `os/exec` to run `docker ps -q`.
+- **Global Agent Tags**: Implemented a "Tag-First" architecture centrally managed from the Dashboard Settings. Tags can be bulk-assigned to multiple agents simultaneously.
+- **Cascading Tag Deletion**: Deleting a project-level tag automatically unassigns it from all associated agents.
+- **Onboarding Empty State**: Replaced the "No agents yet" screen on the Dashboard Overview with an interactive, huge Call-To-Action that directly opens the installation command modal.
+
+### Changed
+- Dashboard Overview, Agent List, and Agent Detail UI now display the number of running Docker containers if applicable.
+- `InstallModal` was extracted to a shared global component for usage across multiple dashboard routes.
+- `Alert Channels` configuration (Telegram, Discord, Webhook) was moved to a dedicated tab inside the unified Settings page.
+- Swapped `Status Page` and `Settings` positions in the sidebar navigation to align with standard UI hierarchy.
+
+### Fixed
+- Infinite loading bug on `/dashboard/status-page` configuration view by correctly fetching projects on mount.
+- TypeScript errors in the status page by replacing `sonner` toast with local state management and correctly handling Shadcn UI `<Button>` component props.
+
+---
+
 ## [0.1.2-beta.1] - 2026-05-07
 
 ### Added

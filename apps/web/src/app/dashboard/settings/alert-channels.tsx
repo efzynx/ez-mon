@@ -8,6 +8,7 @@
 
 import { useEffect, useState, useCallback, type ComponentType } from "react";
 import { Bell, Plus, MessageSquare, Globe, Webhook, Trash2, ToggleLeft, ToggleRight, Loader2, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface Channel {
   id: string;
@@ -32,7 +33,7 @@ const CHANNEL_LABELS: Record<string, string> = {
   webhook: "Generic Webhook",
 };
 
-export default function NotificationsPage() {
+export function AlertChannelsManagement() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
@@ -186,45 +187,39 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in w-full pb-12">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-        <div>
-          <div className="flex items-center gap-2 text-muted-foreground mb-2 font-mono text-sm">
-            <span>Settings</span>
-            <span className="text-xs">/</span>
-            <span className="text-foreground font-medium">Alert Channels</span>
-          </div>
-          <h1 className="text-3xl font-display font-bold text-foreground mb-1 tracking-tight">
-            Notifications
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Configure alert channels for incident notifications
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {projects.length > 1 && (
-            <select
-              value={selectedProject ?? ""}
-              onChange={(e) => setSelectedProject(e.target.value)}
-              className="bg-card border border-border rounded-md py-2 px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-            >
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          )}
-          <button
-            onClick={() => setShowAdd(true)}
-            className="bg-primary hover:opacity-90 text-primary-foreground px-4 py-2 rounded-md font-medium transition-all flex items-center gap-2 text-sm shadow-sm"
-          >
-            <Plus size={16} />
-            Add Channel
-          </button>
-        </div>
+    <div className="mt-2 animate-fade-in">
+      <div className="mb-6">
+        <h2 className="text-lg font-display font-semibold text-foreground/90">Alert Channels</h2>
+        <p className="text-sm text-muted-foreground mt-1">Configure alert channels for incident notifications.</p>
       </div>
 
-      {/* Error banner */}
+      <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden mb-6">
+        <div className="p-4 border-b border-border flex flex-col md:flex-row md:items-center justify-between gap-4 bg-muted/20">
+          <div className="flex items-center gap-3">
+            <h3 className="font-medium text-sm">Channels List</h3>
+            {projects.length > 1 && (
+              <select
+                value={selectedProject ?? ""}
+                onChange={(e) => setSelectedProject(e.target.value)}
+                className="bg-background border border-border rounded-md py-1 px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
+          <Button
+            size="sm"
+            onClick={() => setShowAdd(true)}
+            className="gap-2 h-8"
+          >
+            <Plus size={14} />
+            Add Channel
+          </Button>
+        </div>
+        
+        <div className="p-4">
       {error && (
         <div className="bg-destructive/10 border border-destructive/20 text-destructive rounded-md px-4 py-3 text-sm flex items-center gap-2">
           <Bell size={16} className="shrink-0" />
@@ -350,6 +345,8 @@ export default function NotificationsPage() {
           })}
         </div>
       )}
+      </div>
+      </div>
 
       {/* Add Channel Modal */}
       {showAdd && (

@@ -1,10 +1,291 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, FolderPlus } from "lucide-react";
+import { Plus, FolderPlus, Tags, Loader2, X, Server, Bell } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+
+import { Checkbox } from "@/components/ui/checkbox";
+
+import { AlertChannelsManagement } from "./alert-channels";
+
+function TagsManagement({ projects, onUpdateProject }: { projects: any[], onUpdateProject: (id: string, data: any) => void }) {
+  const [selectedProject, setSelectedProject] = useState<string | null>(null);
+  const [agents, setAgents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [newTagInput, setNewTagInput] = useState("");
+  const [isAddingTag, setIsAddingTag] = useState(false);
+  
+  // Managing Agents for a Tag
+  const [managingTag, setManagingTag] = useState<string | null>(null);
+  const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
+  const [savingAssignments, setSavingAssignments] = useState(false);
+
+  useEffect(() => {
+    if (projects.length > 0 && !selectedProject) {
+      setSelectedProject(projects[0].id);
+    }
+  }, [projects, selectedProject]);
+
+  useEffect(() => {
+    if (!selectedProject) return;
+    setLoading(true);
+    fetch(`/api/dashboard/overview?projectId=${selectedProject}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) setAgents(data.data.agents);
+      })
+      .finally(() => setLoading(false));
+  }, [selectedProject]);
+
+  const activeProject = projects.find(p => p.id === selectedProject);
+  const projectTags = activeProject?.tags || [];
+
+  async function handleAddTag() {
+    if (!newTagInput.trim() || !activeProject) return;
+    const tag = newTagInput.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-");
+    if (projectTags.includes(tag)) {
+      setNewTagInput("");
+      setIsAddingTag(false);
+      return;
+    }
+    
+    const newTags = [...projectTags, tag];
+    
+    try {
+      const res = await fetch("/api/dashboard/projects", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: activeProject.id, tags: newTags })
+      });
+      const data = await res.json();
+      if (data.success) {
+        onUpdateProject(activeProject.id, { tags: newTags });
+        setNewTagInput("");
+        setIsAddingTag(false);
+      } else alert(data.error);
+    } catch { alert("Network error"); }
+  }
+
+  async function handleRemoveTag(tagToRemove: string) {
+    if (!activeProject) return;
+    
+    const affectedAgents = agents.filter(a => a.tags?.includes(tagToRemove));
+    const newTags = projectTags.filter((t: string) => t !== tagToRemove);
+    
+    try {
+      const res = await fetch("/api/dashboard/projects", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: activeProject.id, tags: newTags })
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        onUpdateProject(activeProject.id, { tags: newTags });
+        
+        // Cascading delete for agents that have this tag
+        if (affectedAgents.length > 0) {
+          for (const agent of affectedAgents) {
+            const agentNewTags = agent.tags.filter((t: string) => t !== tagToRemove);
+            await fetch(`/api/dashboard/agents`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ agentId: agent.id, tags: agentNewTags })
+            });
+          }
+          // Update local agents state
+          setAgents(prev => prev.map(a => {
+            if (a.tags?.includes(tagToRemove)) {
+              return { ...a, tags: a.tags.filter((t: string) => t !== tagToRemove) };
+            }
+            return a;
+          }));
+        }
+      }
+    } catch { alert("Network error"); }
+  }
+
+  function openManageModal(tag: string) {
+    setManagingTag(tag);
+    // find which agents currently have this tag
+    const assigned = agents.filter(a => a.tags?.includes(tag)).map(a => a.id);
+    setSelectedAgentIds(assigned);
+  }
+
+  async function handleSaveAssignments() {
+    if (!managingTag || !activeProject) return;
+    setSavingAssignments(true);
+
+    try {
+      // Find agents that need to be updated
+      const updates = agents.map(agent => {
+        const hasTagCurrently = agent.tags?.includes(managingTag) || false;
+        const shouldHaveTag = selectedAgentIds.includes(agent.id);
+        
+        if (hasTagCurrently !== shouldHaveTag) {
+          let newTags = [...(agent.tags || [])];
+          if (shouldHaveTag) newTags.push(managingTag);
+          else newTags = newTags.filter(t => t !== managingTag);
+          return { agentId: agent.id, tags: newTags };
+        }
+        return null;
+      }).filter(Boolean) as { agentId: string, tags: string[] }[];
+
+      // Send requests sequentially
+      for (const update of updates) {
+        await fetch(`/api/dashboard/agents`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ agentId: update.agentId, tags: update.tags })
+        });
+      }
+
+      // Refresh agents locally
+      const updatedAgents = agents.map(a => {
+        const update = updates.find(u => u.agentId === a.id);
+        return update ? { ...a, tags: update.tags } : a;
+      });
+      setAgents(updatedAgents);
+      setManagingTag(null);
+    } catch {
+      alert("Network error while saving assignments");
+    } finally {
+      setSavingAssignments(false);
+    }
+  }
+
+  return (
+    <div className="mt-2">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-lg font-display font-semibold text-foreground/90">Agent Tags Management</h2>
+          <p className="text-sm text-muted-foreground mt-1">Create tags and assign them to multiple agents.</p>
+        </div>
+        {projects.length > 1 && (
+          <select
+            value={selectedProject || ""}
+            onChange={(e) => setSelectedProject(e.target.value)}
+            className="bg-card border border-border rounded-md py-1.5 px-3 text-sm text-foreground focus:outline-none focus:border-primary"
+          >
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      <Card>
+        <div className="p-4 border-b border-border flex items-center justify-between bg-muted/20">
+          <h3 className="font-medium text-sm">Project Tags</h3>
+          <Button size="sm" className="h-8 gap-2" onClick={() => setIsAddingTag(true)}>
+            <Plus size={14} /> Create Tag
+          </Button>
+        </div>
+        <CardContent className="p-0">
+          {isAddingTag && (
+            <div className="p-4 border-b border-border bg-muted/10 flex items-center gap-3">
+              <input 
+                autoFocus
+                placeholder="e.g. production, database" 
+                className="bg-background border border-border rounded-md px-3 py-1.5 text-sm w-full max-w-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                value={newTagInput}
+                onChange={e => setNewTagInput(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleAddTag()}
+              />
+              <Button size="sm" onClick={handleAddTag}>Save</Button>
+              <Button size="sm" variant="ghost" onClick={() => { setIsAddingTag(false); setNewTagInput(""); }}>Cancel</Button>
+            </div>
+          )}
+
+          {loading ? (
+            <div className="p-8 text-center text-muted-foreground"><Loader2 className="animate-spin mx-auto mb-2" size={24} /> Loading...</div>
+          ) : projectTags.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground text-sm">
+              No tags created yet. Create a tag to start grouping your agents.
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {projectTags.map((tag: string) => {
+                const assignedCount = agents.filter(a => a.tags?.includes(tag)).length;
+                return (
+                  <div key={tag} className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors">
+                    <div className="flex items-center gap-4">
+                      <div className="p-2 bg-primary/10 rounded-md"><Tags size={16} className="text-primary" /></div>
+                      <div>
+                        <div className="font-semibold text-sm flex items-center gap-2">
+                          {tag}
+                          <Badge variant="secondary" className="text-[10px] h-5">{assignedCount} agents</Badge>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" className="gap-2 text-xs h-8" onClick={() => openManageModal(tag)}>
+                        <Server size={14} /> Assign Agents
+                      </Button>
+                      <button 
+                        onClick={() => handleRemoveTag(tag)}
+                        className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
+                        title="Delete Tag"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {managingTag && (
+        <div className="fixed inset-0 z-[100] bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center p-4 border-b border-border">
+              <h3 className="font-display font-semibold">Assign Agents to <Badge className="ml-1">{managingTag}</Badge></h3>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setManagingTag(null)}>
+                <X size={16} />
+              </Button>
+            </div>
+            <div className="p-0 max-h-[50vh] overflow-y-auto">
+              {agents.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground text-sm">No agents available in this project.</div>
+              ) : (
+                <div className="divide-y divide-border">
+                  {agents.map(agent => (
+                    <label key={agent.id} className="flex items-center gap-3 p-4 hover:bg-muted/50 cursor-pointer transition-colors">
+                      <Checkbox 
+                        checked={selectedAgentIds.includes(agent.id)} 
+                        onCheckedChange={(checked) => {
+                          if (checked) setSelectedAgentIds([...selectedAgentIds, agent.id]);
+                          else setSelectedAgentIds(selectedAgentIds.filter(id => id !== agent.id));
+                        }} 
+                      />
+                      <div>
+                        <div className="text-sm font-medium">{agent.name}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">{agent.hostname || "Unknown host"}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-border bg-muted/20 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setManagingTag(null)}>Cancel</Button>
+              <Button variant="default" onClick={handleSaveAssignments} disabled={savingAssignments}>
+                {savingAssignments ? <Loader2 size={16} className="animate-spin mr-2" /> : null}
+                Save Assignments
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function SettingsPage() {
   const [projects, setProjects] = useState<{ id: string; name: string; slug: string; createdAt: string }[]>([]);
@@ -14,6 +295,7 @@ export default function SettingsPage() {
   const [slug, setSlug] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState<"projects" | "agent-tags" | "alert-channels">("projects");
 
   useEffect(() => {
     fetch("/api/dashboard/projects").then((r) => r.json()).then((d) => {
@@ -43,50 +325,121 @@ export default function SettingsPage() {
           <div className="flex items-center gap-2 text-muted-foreground mb-2 font-mono text-sm">
             <span>Settings</span>
             <span className="text-xs">/</span>
-            <span className="text-foreground font-medium">Projects</span>
+            <span className="text-foreground font-medium">Workspace</span>
           </div>
           <h1 className="text-3xl font-display font-bold text-foreground mb-1 tracking-tight">Settings</h1>
-          <p className="text-sm text-muted-foreground">Manage projects and workspace preferences</p>
+          <p className="text-sm text-muted-foreground">Central hub for managing projects, tags, and workspace configurations.</p>
         </div>
-        <Button onClick={() => setShowCreate(true)} className="gap-2 shadow-md">
-          <Plus size={18} />New Project
-        </Button>
       </div>
 
-      <div>
-        <h2 className="text-lg font-display font-semibold mb-4 text-foreground/90">Workspace Projects</h2>
-        {loading ? (
-          <div className="space-y-3 mt-4">
-            {[1, 2].map((i) => <div key={i} className="skeleton h-20 rounded-xl bg-card border border-border" />)}
-          </div>
-        ) : projects.length === 0 ? (
-          <Card className="mt-8 border-dashed">
-            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="h-16 w-16 bg-muted rounded-full flex items-center justify-center mb-4">
-                <FolderPlus size={32} className="text-muted-foreground" />
+      <div className="flex flex-col md:flex-row gap-8">
+        <aside className="w-full md:w-56 shrink-0">
+          <nav className="flex flex-col gap-1">
+            <button
+              onClick={() => setActiveTab("projects")}
+              className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
+                activeTab === "projects"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+            >
+              <FolderPlus size={16} />
+              Workspace Projects
+            </button>
+            <button
+              onClick={() => setActiveTab("agent-tags")}
+              className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
+                activeTab === "agent-tags"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+            >
+              <Tags size={16} />
+              Agent Tags
+            </button>
+            <button
+              onClick={() => setActiveTab("alert-channels")}
+              className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
+                activeTab === "alert-channels"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+            >
+              <Bell size={16} />
+              Alert Channels
+            </button>
+          </nav>
+        </aside>
+
+        <div className="flex-1 min-w-0">
+          {activeTab === "projects" && (
+            <div className="mt-2">
+              <div className="mb-6">
+                <h2 className="text-lg font-display font-semibold text-foreground/90">Workspace Projects</h2>
+                <p className="text-sm text-muted-foreground mt-1">Manage all projects in your workspace.</p>
               </div>
-              <p className="text-muted-foreground mb-6 text-sm">Create your first project to start monitoring.</p>
-              <Button onClick={() => setShowCreate(true)} className="gap-2"><Plus size={18} />Create Project</Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {projects.map((p) => (
-              <Card key={p.id} className="hover:border-border/80 transition-colors shadow-sm group">
-                <CardContent className="p-5 flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold text-foreground group-hover:text-primary transition-colors">{p.name}</p>
-                    <p className="text-xs text-muted-foreground font-mono mt-1">{p.slug} <span className="mx-2 text-border">|</span> ID: {p.id.slice(0, 8)}...</p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Created</span>
-                    <span className="text-sm font-mono text-foreground/80">{new Date(p.createdAt).toLocaleDateString()}</span>
-                  </div>
+
+              <Card>
+                <div className="p-4 border-b border-border flex items-center justify-between bg-muted/20">
+                  <h3 className="font-medium text-sm">Projects List</h3>
+                  <Button size="sm" className="h-8 gap-2" onClick={() => setShowCreate(true)}>
+                    <Plus size={14} /> New Project
+                  </Button>
+                </div>
+                <CardContent className="p-0">
+                  {loading ? (
+                    <div className="p-8 text-center text-muted-foreground"><Loader2 className="animate-spin mx-auto mb-2" size={24} /> Loading...</div>
+                  ) : projects.length === 0 ? (
+                    <div className="p-8 text-center text-muted-foreground text-sm">
+                      <div className="h-16 w-16 bg-muted rounded-full flex items-center justify-center mb-4 mx-auto">
+                        <FolderPlus size={32} className="text-muted-foreground" />
+                      </div>
+                      <p className="mb-4">Create your first project to start monitoring.</p>
+                      <Button onClick={() => setShowCreate(true)} className="gap-2" size="sm"><Plus size={16} />Create Project</Button>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-border">
+                      {projects.map((p) => (
+                        <div key={p.id} className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors">
+                          <div className="flex items-center gap-4">
+                            <div className="p-2 bg-primary/10 rounded-md"><FolderPlus size={16} className="text-primary" /></div>
+                            <div>
+                              <div className="font-semibold text-sm flex items-center gap-2">
+                                {p.name}
+                              </div>
+                              <div className="text-xs text-muted-foreground font-mono mt-1 flex items-center gap-2">
+                                {p.slug} <span className="text-border">|</span> ID: {p.id.slice(0, 8)}...
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                             <div className="flex flex-col items-end gap-0.5">
+                                <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Created</span>
+                                <span className="text-xs font-mono text-foreground/80">{new Date(p.createdAt).toLocaleDateString()}</span>
+                              </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
-            ))}
-          </div>
+            </div>
+          )}
+
+        {activeTab === "agent-tags" && !loading && projects.length > 0 && (
+          <TagsManagement 
+            projects={projects} 
+            onUpdateProject={(id, data) => {
+              setProjects(projects.map(p => p.id === id ? { ...p, ...data } : p));
+            }}
+          />
         )}
+
+        {activeTab === "alert-channels" && (
+          <AlertChannelsManagement />
+        )}
+        </div>
       </div>
 
       {showCreate && (

@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { agents, projects, eq, and } from "@ezmon/db";
+import { updateAgentStatusPageSchema, updateAgentTagsSchema } from "@ezmon/shared";
 
 export async function DELETE(req: NextRequest) {
   try {
@@ -50,6 +51,62 @@ export async function DELETE(req: NextRequest) {
     });
   } catch (error) {
     console.error("[agents] DELETE Error:", error);
+    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await req.json();
+
+    if ("tags" in body) {
+      const result = updateAgentTagsSchema.safeParse(body);
+      if (!result.success) {
+        return NextResponse.json({ success: false, error: "Invalid input", issues: result.error.issues }, { status: 400 });
+      }
+
+      const { agentId, tags } = result.data;
+      const agentRows = await db()
+        .select({ id: agents.id })
+        .from(agents)
+        .innerJoin(projects, eq(agents.projectId, projects.id))
+        .where(and(eq(agents.id, agentId), eq(projects.userId, session.user.id)))
+        .limit(1);
+
+      if (agentRows.length === 0) return NextResponse.json({ success: false, error: "Agent not found" }, { status: 404 });
+      
+      await db().update(agents).set({ tags }).where(eq(agents.id, agentId));
+      return NextResponse.json({ success: true });
+    }
+
+    if ("showOnStatusPage" in body) {
+      const result = updateAgentStatusPageSchema.safeParse(body);
+      if (!result.success) {
+        return NextResponse.json({ success: false, error: "Invalid input", issues: result.error.issues }, { status: 400 });
+      }
+
+      const { agentId, showOnStatusPage } = result.data;
+      const agentRows = await db()
+        .select({ id: agents.id })
+        .from(agents)
+        .innerJoin(projects, eq(agents.projectId, projects.id))
+        .where(and(eq(agents.id, agentId), eq(projects.userId, session.user.id)))
+        .limit(1);
+
+      if (agentRows.length === 0) return NextResponse.json({ success: false, error: "Agent not found" }, { status: 404 });
+
+      await db().update(agents).set({ showOnStatusPage }).where(eq(agents.id, agentId));
+      return NextResponse.json({ success: true });
+    }
+
+    return NextResponse.json({ success: false, error: "No valid update fields" }, { status: 400 });
+  } catch (error) {
+    console.error("[agents] PATCH Error:", error);
     return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
   }
 }

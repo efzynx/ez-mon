@@ -14,9 +14,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -97,7 +99,7 @@ type MetricsPayload struct {
 	Load1             float64   `json:"load1,omitempty"`
 	NetRxBps          int64     `json:"netRxBps,omitempty"`
 	NetTxBps          int64     `json:"netTxBps,omitempty"`
-	ContainersRunning int       `json:"containersRunning,omitempty"`
+	ContainersRunning *int      `json:"containersRunning,omitempty"`
 }
 
 type RegisterRequest struct {
@@ -353,6 +355,19 @@ func collectMetrics() (MetricsPayload, error) {
 		p.NetTxBps = int64(netStats[0].BytesSent)
 	} else if err != nil {
 		log.Printf("[metrics] Network read error: %v", err)
+	}
+
+	// Docker containers running
+	out, err := exec.Command("docker", "ps", "-q").Output()
+	if err == nil {
+		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+		count := 0
+		for _, line := range lines {
+			if strings.TrimSpace(line) != "" {
+				count++
+			}
+		}
+		p.ContainersRunning = &count
 	}
 
 	return p, nil

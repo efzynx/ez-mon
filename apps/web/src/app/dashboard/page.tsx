@@ -1,14 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import {
-  Server,
-  AlertTriangle,
-  Activity,
-  Plus,
-  Terminal,
-  CheckCircle,
-} from "lucide-react";
+import { AlertTriangle, CheckCircle, Server, Activity, Terminal, Box, Plus, Copy } from "lucide-react";
 import Link from "next/link";
 import type { DashboardOverview } from "@ezmon/shared";
 
@@ -16,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { InstallModal } from "@/components/install-modal";
 
 export default function DashboardPage() {
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
@@ -23,6 +17,7 @@ export default function DashboardPage() {
     { id: string; name: string; slug: string }[]
   >([]);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
+  const [showInstall, setShowInstall] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -146,12 +141,10 @@ export default function DashboardPage() {
               ))}
             </select>
           )}
-          <Link href="/dashboard/agents">
-            <Button className="gap-2 w-full sm:w-auto">
-              <Plus size={18} />
-              Install Agent
-            </Button>
-          </Link>
+          <Button className="gap-2 w-full sm:w-auto" onClick={() => setShowInstall(true)} disabled={!selectedProject}>
+            <Plus size={18} />
+            Install Agent
+          </Button>
         </div>
       </div>
 
@@ -227,14 +220,25 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent className="flex-1">
                 {overview.agents.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center p-8 text-center border-2 border-dashed border-border rounded-xl">
-                    <Server size={32} className="mx-auto mb-3 text-muted-foreground" />
-                    <p className="text-muted-foreground mb-4">No agents are connected to this project yet.</p>
-                    <Link href="/dashboard/agents">
-                      <Button variant="outline" className="gap-2">
-                        <Plus size={16} /> Setup your first agent
+                  <div className="flex flex-col items-center justify-center py-16 px-4 text-center border-2 border-dashed border-border rounded-xl bg-muted/10">
+                    <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-6">
+                      <Server size={32} className="text-primary" />
+                    </div>
+                    <h3 className="text-2xl font-display font-bold mb-3 text-foreground">Awaiting First Agent</h3>
+                    <p className="text-muted-foreground max-w-md mb-8 leading-relaxed">
+                      Your project is ready! Install the lightweight EZMON agent on your Linux server to begin streaming real-time metrics.
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-4">
+                      <Button size="lg" className="gap-2" onClick={() => setShowInstall(true)}>
+                        <Terminal size={18} />
+                        Get Installation Command
                       </Button>
-                    </Link>
+                      <Link href="/dashboard/settings">
+                        <Button size="lg" variant="outline" className="gap-2">
+                          Configure Settings
+                        </Button>
+                      </Link>
+                    </div>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
@@ -257,7 +261,18 @@ export default function DashboardPage() {
                                 </div>
                                 <div>
                                   <div className="font-semibold text-foreground text-sm group-hover:text-primary transition-colors line-clamp-1">{agent.name}</div>
-                                  <div className="text-xs text-muted-foreground font-mono mt-0.5 line-clamp-1">{agent.os || "Unknown OS"}</div>
+                                  <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                                    <div className="text-xs text-muted-foreground font-mono line-clamp-1">{agent.os || "Unknown OS"}</div>
+                                    {agent.state?.containersRunning !== undefined && agent.state?.containersRunning !== null && (
+                                      <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 uppercase tracking-wider bg-blue-500/10 text-blue-400 border-blue-500/20 shadow-none font-semibold flex items-center">
+                                        <Box size={10} className="mr-1" />
+                                        {agent.state.containersRunning}
+                                      </Badge>
+                                    )}
+                                    {agent.tags && agent.tags.length > 0 && agent.tags.map(tag => (
+                                      <Badge key={tag} variant="secondary" className="text-[9px] px-1.5 py-0 h-4 bg-muted/50 text-muted-foreground">{tag}</Badge>
+                                    ))}
+                                  </div>
                                 </div>
                               </div>
                               <Badge variant={isOnline ? "default" : "destructive"} className={`uppercase text-[10px] tracking-wider font-bold ${isOnline ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border-emerald-500/20' : 'bg-destructive/10 text-destructive hover:bg-destructive/20 border-destructive/20'}`}>
@@ -341,6 +356,17 @@ export default function DashboardPage() {
             </Card>
           </div>
         </>
+      )}
+
+      {showInstall && selectedProject && (
+        <InstallModal 
+          projectId={selectedProject} 
+          onClose={() => {
+            setShowInstall(false);
+            setLoading(true);
+            fetchOverview();
+          }} 
+        />
       )}
     </div>
   );

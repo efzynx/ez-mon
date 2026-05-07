@@ -37,7 +37,7 @@ const navItems = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/dashboard/agents", label: "Agents", icon: Server },
   { href: "/dashboard/incidents", label: "Incidents", icon: AlertTriangle },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings },
+  { href: "/dashboard/status-page", label: "Status Page", icon: Globe },
 ];
 
 function SidebarNav({ isMobile = false, closeMenu = () => {} }) {
@@ -90,20 +90,12 @@ function SidebarNav({ isMobile = false, closeMenu = () => {} }) {
 
       <div className="flex flex-col gap-1 mt-auto border-t border-border/50 p-3 bg-muted/20">
         <Link
-          href="/dashboard/notifications"
+          href="/dashboard/settings"
           onClick={closeMenu}
           className="flex items-center gap-3 px-3 py-2.5 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all rounded-lg text-sm font-medium"
         >
-          <Bell size={18} />
-          Alert Channels
-        </Link>
-        <Link
-          href="/dashboard/status-page"
-          onClick={closeMenu}
-          className="flex items-center gap-3 px-3 py-2.5 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all rounded-lg text-sm font-medium"
-        >
-          <Globe size={18} />
-          Status Page
+          <Settings size={18} />
+          Settings
         </Link>
       </div>
     </div>

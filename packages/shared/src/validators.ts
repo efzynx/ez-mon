@@ -104,3 +104,28 @@ export const registerSchema = z.object({
 
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
+
+// ─── Status Page ──────────────────────────────────────────────────────────────
+
+export const updateAgentStatusPageSchema = z.object({
+  agentId: z.string().uuid("Invalid agent ID"),
+  showOnStatusPage: z.boolean(),
+});
+
+export type UpdateAgentStatusPageInput = z.infer<typeof updateAgentStatusPageSchema>;
+
+export const updateAgentTagsSchema = z.object({
+  agentId: z.string().uuid("Invalid agent ID"),
+  tags: z.array(z.string().max(30)).max(10, "Maximum 10 tags allowed"),
+});
+
+export type UpdateAgentTagsInput = z.infer<typeof updateAgentTagsSchema>;
+
+export const saveStatusPageSchema = z.object({
+  projectId: z.string().uuid("Invalid project ID"),
+  title: z.string().min(1, "Title is required").max(100),
+  description: z.string().max(500).optional().nullable(),
+  published: z.boolean(),
+});
+
+export type SaveStatusPageInput = z.infer<typeof saveStatusPageSchema>;

@@ -7,7 +7,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Server, Plus, Copy, Check, Activity, X, Trash2, Loader2 } from "lucide-react";
+import { Server, Plus, Activity, X, Trash2, Loader2, Box, Tags } from "lucide-react";
 import Link from "next/link";
 import type { DashboardAgent } from "@ezmon/shared";
 
@@ -23,140 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-
-function InstallModal({
-  projectId,
-  onClose,
-}: {
-  projectId: string;
-  onClose: () => void;
-}) {
-  const [copied, setCopied] = useState(false);
-  const [detected, setDetected] = useState(false);
-  const appUrl =
-    typeof window !== "undefined" ? window.location.origin : "https://your-hub.vercel.app";
-
-  const installCmd = `curl -fsSL ${appUrl}/install.sh | EZMON_SERVER_URL=${appUrl} EZMON_TOKEN=${projectId} sh`;
-
-  function copyToClipboard() {
-    navigator.clipboard.writeText(installCmd);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  // Poll setiap 5 detik — auto-close saat agent baru terdeteksi
-  useEffect(() => {
-    let initialCount: number | null = null;
-    const poll = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/dashboard/overview?projectId=${projectId}`);
-        const data = await res.json();
-        if (!data.success) return;
-        const count: number = data.data.totalAgents;
-        if (initialCount === null) { initialCount = count; return; }
-        if (count > initialCount) {
-          setDetected(true);
-          clearInterval(poll);
-          setTimeout(() => onClose(), 1800);
-        }
-      } catch { /* silent */ }
-    }, 5000);
-    return () => clearInterval(poll);
-  }, [projectId, onClose]);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-2xl bg-card rounded-xl overflow-hidden flex flex-col max-h-[90vh] shadow-2xl border border-border">
-        {/* Header */}
-        <div className="bg-muted/30 border-b border-border px-6 py-5 flex justify-between items-center">
-          <div>
-            <h2 className="text-xl font-display font-bold text-foreground">Install New Agent</h2>
-            <p className="text-sm text-muted-foreground mt-1">Deploy the EZMON agent to your infrastructure</p>
-          </div>
-          <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full">
-            <X size={20} />
-          </Button>
-        </div>
-
-        <div className="p-6 overflow-y-auto space-y-5">
-          {/* Command */}
-          <div className="bg-background border border-border rounded-lg overflow-hidden shadow-sm">
-            <div className="bg-muted/50 border-b border-border px-4 py-3 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-6 h-6 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-xs font-mono text-primary">1</div>
-                <h3 className="font-semibold text-sm text-foreground">Run on target server (Linux, as root)</h3>
-              </div>
-              <div className="flex gap-1.5">
-                <div className="w-3 h-3 rounded-full bg-muted-foreground/30" />
-                <div className="w-3 h-3 rounded-full bg-muted-foreground/30" />
-                <div className="w-3 h-3 rounded-full bg-muted-foreground/30" />
-              </div>
-            </div>
-            <div className="p-5 bg-zinc-950 relative group flex flex-col gap-4">
-              <div className="relative bg-black border border-zinc-800 rounded-md p-4 overflow-x-auto">
-                <pre className="text-sm text-zinc-300 font-mono whitespace-pre"><span className="text-blue-400">curl</span> <span className="text-zinc-400">-fsSL</span> <span className="text-emerald-400">{appUrl}/install.sh</span> <span className="text-zinc-500">|</span> <span className="text-purple-400">EZMON_SERVER_URL</span><span className="text-zinc-300">=</span><span className="text-emerald-400">{appUrl}</span> <span className="text-purple-400">EZMON_TOKEN</span><span className="text-zinc-300">=</span><span className="text-orange-300">{projectId}</span> <span className="text-blue-400">sh</span></pre>
-                <Button
-                  size="icon"
-                  variant="outline"
-                  onClick={copyToClipboard}
-                  className="absolute top-2 right-2 h-8 w-8 bg-zinc-900 border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-                </Button>
-              </div>
-              <div className="flex items-start gap-3 bg-blue-500/10 border border-blue-500/20 rounded-md p-3">
-                <Server size={16} className="text-blue-400 mt-0.5 shrink-0" />
-                <p className="text-xs text-blue-200/70 leading-relaxed">
-                  The script auto-detects your system architecture, installs the binary to{" "}
-                  <code className="font-mono">/usr/local/bin/ezmon-agent</code>, and configures a systemd service.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* DEV mode notice */}
-          <div className="flex items-start gap-3 bg-yellow-500/10 border border-yellow-500/20 rounded-md p-3 text-xs text-yellow-200/80">
-            <span className="text-yellow-400 font-bold shrink-0 mt-0.5">DEV</span>
-            <span className="leading-relaxed">
-              In <strong>monorepo (localhost)</strong> mode, the script will <strong>build the binary from source</strong>{" "}
-              using the detected Go compiler, then install to{" "}
-              <code className="font-mono bg-black/30 px-1 rounded">/usr/local/bin/ezmon-agent</code>{" "}
-              and configure the systemd service. Run with <code className="font-mono bg-black/30 px-1 rounded">sudo</code> if needed.
-            </span>
-          </div>
-
-          {/* Heartbeat status */}
-          {detected ? (
-            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-5 flex items-center gap-4">
-              <div className="w-10 h-10 flex items-center justify-center bg-emerald-500/20 rounded-full shrink-0">
-                <Activity size={18} className="text-emerald-500" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-sm text-emerald-400">Agent detected!</h3>
-                <p className="text-xs text-muted-foreground mt-1">Heartbeat received. Closing automatically...</p>
-              </div>
-            </div>
-          ) : (
-            <div className="bg-card border border-border rounded-lg p-5 flex items-center gap-4 border-l-4 border-l-primary/50">
-              <div className="relative w-10 h-10 flex items-center justify-center shrink-0">
-                <div className="absolute inset-0 rounded-full border-2 border-muted" />
-                <div className="absolute inset-0 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                <Activity size={16} className="text-primary" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-sm text-foreground">Waiting for heartbeat...</h3>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Run the command on your target server. This dialog closes automatically once the agent is detected.
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+import { InstallModal } from "@/components/install-modal";
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState<DashboardAgent[]>([]);
@@ -165,6 +32,11 @@ export default function AgentsPage() {
   const [showInstall, setShowInstall] = useState(false);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const [showTagsModal, setShowTagsModal] = useState(false);
+  const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
+  const [editingTags, setEditingTags] = useState("");
+  const [savingTags, setSavingTags] = useState(false);
 
   useEffect(() => {
     async function fetchProjects() {
@@ -221,6 +93,30 @@ export default function AgentsPage() {
       alert("Network error");
     } finally {
       setDeletingId(null);
+    }
+  }
+
+  async function handleSaveTags() {
+    if (!editingAgentId) return;
+    setSavingTags(true);
+    const tagsArray = editingTags.split(",").map(t => t.trim()).filter(t => t.length > 0);
+    try {
+      const res = await fetch(`/api/dashboard/agents`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId: editingAgentId, tags: tagsArray })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAgents((prev) => prev.map(a => a.id === editingAgentId ? { ...a, tags: tagsArray } : a));
+        setShowTagsModal(false);
+      } else {
+        alert(data.error || "Failed to update tags");
+      }
+    } catch {
+      alert("Network error");
+    } finally {
+      setSavingTags(false);
     }
   }
 
@@ -299,6 +195,7 @@ export default function AgentsPage() {
                   <TableHead className="font-semibold whitespace-nowrap uppercase text-[10px] tracking-wider text-muted-foreground h-10">Name</TableHead>
                   <TableHead className="font-semibold whitespace-nowrap uppercase text-[10px] tracking-wider text-muted-foreground h-10">Status</TableHead>
                   <TableHead className="font-semibold whitespace-nowrap uppercase text-[10px] tracking-wider text-muted-foreground h-10">System</TableHead>
+                  <TableHead className="font-semibold whitespace-nowrap uppercase text-[10px] tracking-wider text-muted-foreground h-10">Docker</TableHead>
                   <TableHead className="font-semibold whitespace-nowrap uppercase text-[10px] tracking-wider text-muted-foreground h-10">CPU</TableHead>
                   <TableHead className="font-semibold whitespace-nowrap uppercase text-[10px] tracking-wider text-muted-foreground h-10">RAM</TableHead>
                   <TableHead className="font-semibold whitespace-nowrap uppercase text-[10px] tracking-wider text-muted-foreground text-right h-10">Last Seen</TableHead>
@@ -318,11 +215,20 @@ export default function AgentsPage() {
                       className={`group cursor-pointer transition-colors hover:bg-muted/50 ${!isOnline ? 'bg-destructive/5' : ''}`}
                     >
                       <TableCell className="whitespace-nowrap font-medium py-4">
-                        <div className="flex items-center gap-3">
-                          <Server size={16} className="text-muted-foreground group-hover:text-primary transition-colors" />
-                          <span className={`font-mono ${isOnline ? 'text-primary' : 'text-muted-foreground'}`}>
-                            {agent.name}
-                          </span>
+                        <div className="flex flex-col gap-1.5">
+                          <div className="flex items-center gap-3">
+                            <Server size={16} className="text-muted-foreground group-hover:text-primary transition-colors" />
+                            <span className={`font-mono ${isOnline ? 'text-primary' : 'text-muted-foreground'}`}>
+                              {agent.name}
+                            </span>
+                          </div>
+                          {agent.tags && agent.tags.length > 0 && (
+                            <div className="flex items-center gap-1.5 ml-7">
+                              {agent.tags.map(tag => (
+                                <Badge key={tag} variant="secondary" className="text-[9px] px-1.5 py-0 h-4 bg-muted/50 text-muted-foreground hover:bg-muted">{tag}</Badge>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell className="whitespace-nowrap py-4">
@@ -333,6 +239,16 @@ export default function AgentsPage() {
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-muted-foreground font-mono text-xs py-4">
                         {agent.os}/{agent.arch}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap py-4">
+                        {agent.state?.containersRunning !== undefined && agent.state?.containersRunning !== null ? (
+                          <div className="flex items-center gap-1.5 text-blue-400">
+                            <Box size={14} />
+                            <span className="font-mono text-xs font-semibold">{agent.state.containersRunning}</span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground/30 font-mono text-xs">--</span>
+                        )}
                       </TableCell>
                       <TableCell className="whitespace-nowrap min-w-[140px] py-4">
                         {isOnline ? (
