@@ -2,7 +2,7 @@
 
 export type AgentStatus = "online" | "offline" | "unknown";
 
-export type IncidentType = "heartbeat_missed" | "recovered" | "threshold_cpu" | "threshold_memory" | "threshold_disk";
+export type IncidentType = "heartbeat_missed" | "recovered" | "threshold_cpu" | "threshold_memory" | "threshold_disk" | "monitor_down";
 
 export type IncidentStatus = "open" | "resolved";
 
@@ -69,6 +69,9 @@ export interface DashboardOverview {
   onlineAgents: number;
   offlineAgents: number;
   unknownAgents: number;
+  totalMonitors?: number;
+  onlineMonitors?: number;
+  offlineMonitors?: number;
   openIncidents: number;
   recentIncidents: DashboardIncident[];
   agents: DashboardAgent[];

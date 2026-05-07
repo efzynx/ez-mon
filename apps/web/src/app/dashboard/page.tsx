@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { AlertTriangle, CheckCircle, Server, Activity, Terminal, Box, Plus, Copy } from "lucide-react";
+import { AlertTriangle, CheckCircle, Server, Activity, Terminal, Box, Plus, Copy, Globe, MonitorUp } from "lucide-react";
 import Link from "next/link";
 import type { DashboardOverview } from "@ezmon/shared";
 
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { InstallModal } from "@/components/install-modal";
+import { GlobalAgentMap } from "./overview/GlobalAgentMap";
 
 export default function DashboardPage() {
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
@@ -156,10 +157,10 @@ export default function DashboardPage() {
 
       {overview && (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-6">
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Total Agents</CardTitle>
+                <CardTitle className="text-xs font-semibold tracking-wider text-muted-foreground uppercase flex items-center gap-1"><Server size={14}/> Agents</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-mono font-bold text-foreground">{overview.totalAgents}</div>
@@ -168,31 +169,42 @@ export default function DashboardPage() {
 
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Online</CardTitle>
+                <CardTitle className="text-xs font-semibold tracking-wider text-muted-foreground uppercase flex items-center gap-1"><Globe size={14}/> Monitors</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-mono font-bold text-foreground">{overview.totalMonitors ?? 0}</div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Online Nodes</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
-                  <div className="text-3xl font-mono font-bold text-emerald-500">{overview.onlineAgents}</div>
+                  <div className="text-3xl font-mono font-bold text-emerald-500">{(overview.onlineAgents || 0) + (overview.onlineMonitors || 0)}</div>
                 </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Offline</CardTitle>
+                <CardTitle className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Offline Nodes</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-destructive shadow-[0_0_8px_rgba(239,68,68,0.5)]"></span>
-                  <div className="text-3xl font-mono font-bold text-destructive">{overview.offlineAgents}</div>
+                  <span className={`w-2.5 h-2.5 rounded-full ${(overview.offlineAgents || 0) + (overview.offlineMonitors || 0) > 0 ? 'bg-destructive shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'bg-muted-foreground'}`}></span>
+                  <div className={`text-3xl font-mono font-bold ${(overview.offlineAgents || 0) + (overview.offlineMonitors || 0) > 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                    {(overview.offlineAgents || 0) + (overview.offlineMonitors || 0)}
+                  </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="col-span-2 md:col-span-1">
               <CardHeader className="pb-2">
-                <CardTitle className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Open Incidents</CardTitle>
+                <CardTitle className="text-xs font-semibold tracking-wider text-muted-foreground uppercase flex items-center gap-1"><AlertTriangle size={14}/> Incidents</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center gap-2">
@@ -354,6 +366,11 @@ export default function DashboardPage() {
                 )}
               </CardContent>
             </Card>
+          </div>
+
+          {/* Map Section */}
+          <div className="grid grid-cols-1 mt-6">
+            <GlobalAgentMap agents={overview.agents} />
           </div>
         </>
       )}

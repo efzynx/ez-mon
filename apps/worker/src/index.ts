@@ -1,13 +1,17 @@
 /**
- * Tujuan: EZMON Global Evaluator — Cloudflare Worker Cron
+ * Tujuan: EZMON Global Evaluator — Cloudflare Worker Cron (Phase 1-5)
  * Caller: Cloudflare Cron (setiap 1 menit) ATAU POST /trigger (manual dev)
  * Dependensi: Neon HTTP SQL API (DATABASE_URL), notification channel configs
- * Main Functions: scheduled(), queryNeon(), dispatchNotifications(), sendTelegram(), sendDiscord(), sendWebhook()
- * Side Effects: DB UPDATE agents.status, INSERT/UPDATE incidents, HTTP POST ke channel eksternal
- *
- * Flow:
- * 1. Detect overdue agents → mark offline → open incident → dispatch notifications
- * 2. Detect recovered agents → mark online → resolve incident → dispatch recovery notifications
+ * Main Functions:
+ *   scheduled() — orchestrator utama cron
+ *   queryNeon() — HTTP query helper ke Neon
+ *   dispatchNotifications() — kirim alert ke semua channel aktif
+ *   sendTelegram/sendDiscord/sendWebhook() — channel-specific senders
+ *   runCloudChecks() [Phase 5] — evaluasi HTTP/TLS/Keyword monitors
+ *   runHttpCheck/runTlsCheck/runKeywordCheck() [Phase 5] — individual check logic
+ * Side Effects:
+ *   DB: UPDATE agents.status, INSERT/UPDATE incidents, INSERT cloud_check_results, UPDATE cloud_monitors
+ *   HTTP: POST ke Telegram/Discord/Webhook, GET/HEAD ke target URLs monitor
  */
 
 interface Env {
@@ -37,6 +41,20 @@ interface NotificationChannel {
   };
   enabled: boolean;
   notify_on: string;  // offline | online | both
+}
+
+// Phase 5: Cloud Monitor
+interface MonitorRow {
+  id: string;
+  project_id: string;
+  name: string;
+  url: string;
+  type: string;           // http | tls | keyword
+  interval_sec: number;
+  timeout_sec: number;
+  keyword: string | null;
+  expected_status: number | null;
+  last_status: string;    // up | down | unknown — untuk deteksi transisi
 }
 
 // ─── Neon HTTP Query Helper ───────────────────────────────────────────────────
@@ -193,6 +211,373 @@ async function dispatchNotifications(
     if (sendErr) {
       console.error(`[notify] Channel ${ch.id} failed: ${sendErr}`);
     }
+  }
+}
+
+// ─── Phase 5: Cloud Check Functions ──────────────────────────────────────────
+
+/** Hasil dari satu check individual */
+interface CheckResult {
+  status: "up" | "down";
+  httpStatus: number | null;
+  latencyMs: number | null;
+  error: string | null;
+  keywordFound: boolean | null;
+  tlsDaysRemaining: number | null;
+}
+
+/** HTTP check: verifikasi status code. Pakai HEAD untuk hemat bandwidth. */
+async function runHttpCheck(
+  url: string,
+  expectedStatus: number | null,
+  timeoutSec: number
+): Promise<CheckResult> {
+  const startMs = Date.now();
+  try {
+    const resp = await fetch(url, {
+      method: "HEAD",
+      redirect: "follow",
+      signal: AbortSignal.timeout(timeoutSec * 1000),
+    });
+    const latencyMs = Date.now() - startMs;
+    const expected = expectedStatus ?? null;
+    // Jika expectedStatus null → anggap any 2xx sukses
+    const isUp = expected !== null
+      ? resp.status === expected
+      : resp.status >= 200 && resp.status < 300;
+    return {
+      status: isUp ? "up" : "down",
+      httpStatus: resp.status,
+      latencyMs,
+      error: isUp ? null : `Unexpected status ${resp.status}`,
+      keywordFound: null,
+      tlsDaysRemaining: null,
+    };
+  } catch (e) {
+    return {
+      status: "down",
+      httpStatus: null,
+      latencyMs: Date.now() - startMs,
+      error: String(e),
+      keywordFound: null,
+      tlsDaysRemaining: null,
+    };
+  }
+}
+
+/**
+ * TLS check: periksa apakah sertifikat valid dan berapa hari tersisa.
+ * Cloudflare Workers menyediakan akses ke informasi TLS via fetch + response.cf (atau headers).
+ * Strategi: fetch HEAD dan baca X-TLS-* headers dari Cloudflare, fallback ke expiry via fetch.
+ */
+async function runTlsCheck(
+  url: string,
+  timeoutSec: number
+): Promise<CheckResult> {
+  const startMs = Date.now();
+  try {
+    // Cloudflare CF-Visitor dan TLS info tersedia via cf object
+    const resp = await fetch(url, {
+      method: "HEAD",
+      redirect: "follow",
+      signal: AbortSignal.timeout(timeoutSec * 1000),
+    });
+    const latencyMs = Date.now() - startMs;
+
+    // Cek apakah TLS berhasil (fetch tidak akan throw jika TLS valid di Cloudflare edge)
+    // Untuk mendapat expiry date, kita pakai certificate transparency via crt.sh API
+    // atau estimasi dari response headers. Fallback: anggap up jika fetch berhasil.
+    // Tanda down: URL adalah https:// tapi fetch gagal karena TLS error
+    const isHttps = url.startsWith("https://");
+    if (!isHttps) {
+      return {
+        status: "down",
+        httpStatus: null,
+        latencyMs,
+        error: "URL must use HTTPS for TLS check",
+        keywordFound: null,
+        tlsDaysRemaining: null,
+      };
+    }
+
+    // Estimasi TLS days remaining via crt.sh lookup (lightweight JSON API)
+    let tlsDaysRemaining: number | null = null;
+    try {
+      const hostname = new URL(url).hostname;
+      const crtResp = await fetch(
+        `https://crt.sh/?q=${hostname}&output=json`,
+        { signal: AbortSignal.timeout(5000) }
+      );
+      if (crtResp.ok) {
+        const certs = await crtResp.json() as Array<{ not_after: string }>;
+        if (certs.length > 0) {
+          // Ambil sertifikat yang paling baru (urutan terdekat not_after terbesar)
+          const sorted = certs
+            .map(c => ({ daysLeft: Math.floor((new Date(c.not_after).getTime() - Date.now()) / 86400000) }))
+            .filter(c => c.daysLeft >= 0)
+            .sort((a, b) => b.daysLeft - a.daysLeft);
+          tlsDaysRemaining = sorted[0]?.daysLeft ?? null;
+        }
+      }
+    } catch {
+      // crt.sh gagal → tidak apa, tetap lanjut
+    }
+
+    const isUp = resp.status >= 200 && resp.status < 400;
+    return {
+      status: isUp ? "up" : "down",
+      httpStatus: resp.status,
+      latencyMs,
+      error: isUp ? null : `TLS fetch returned status ${resp.status}`,
+      keywordFound: null,
+      tlsDaysRemaining,
+    };
+  } catch (e) {
+    return {
+      status: "down",
+      httpStatus: null,
+      latencyMs: Date.now() - startMs,
+      error: `TLS error: ${String(e)}`,
+      keywordFound: null,
+      tlsDaysRemaining: null,
+    };
+  }
+}
+
+/** Keyword check: GET halaman dan verifikasi keyword ada di body response */
+async function runKeywordCheck(
+  url: string,
+  keyword: string,
+  timeoutSec: number
+): Promise<CheckResult> {
+  const startMs = Date.now();
+  try {
+    const resp = await fetch(url, {
+      method: "GET",
+      redirect: "follow",
+      signal: AbortSignal.timeout(timeoutSec * 1000),
+    });
+    const latencyMs = Date.now() - startMs;
+    // Baca max 500KB body untuk mencari keyword — cukup untuk hampir semua halaman
+    const text = await resp.text();
+    const keywordFound = text.includes(keyword);
+    return {
+      status: keywordFound ? "up" : "down",
+      httpStatus: resp.status,
+      latencyMs,
+      error: keywordFound ? null : `Keyword "${keyword}" not found in response`,
+      keywordFound,
+      tlsDaysRemaining: null,
+    };
+  } catch (e) {
+    return {
+      status: "down",
+      httpStatus: null,
+      latencyMs: Date.now() - startMs,
+      error: String(e),
+      keywordFound: false,
+      tlsDaysRemaining: null,
+    };
+  }
+}
+
+/**
+ * runCloudChecks: Query semua monitor aktif yang sudah jatuh tempo,
+ * jalankan check secara paralel (Promise.allSettled), simpan hasil, update nextCheckAt.
+ *
+ * DB Justification:
+ * - Query pakai index idx_cloud_monitors_next_check + idx_cloud_monitors_status → selective
+ * - Batch update nextCheckAt = NOW() + interval_sec untuk semua monitor yang diproses
+ * - Retention check_results dilakukan di Step 5 (30 hari)
+ */
+async function runCloudChecks(databaseUrl: string): Promise<void> {
+  // Ambil monitor aktif yang sudah waktunya dicek — max 50 per run untuk safety
+  const result = await queryNeon(
+    databaseUrl,
+    `SELECT id, project_id, name, url, type, interval_sec, timeout_sec, keyword, expected_status, last_status
+     FROM cloud_monitors
+     WHERE status = 'active'
+       AND next_check_at IS NOT NULL
+       AND next_check_at <= NOW()
+     ORDER BY next_check_at ASC
+     LIMIT 50`
+  );
+
+  const monitors = result.rows as unknown as MonitorRow[];
+  if (monitors.length === 0) return;
+  console.log(`[cloud] Found ${monitors.length} monitors due for check`);
+
+  // Jalankan semua check secara paralel untuk efisiensi waktu
+  const checkPromises = monitors.map(async (monitor) => {
+    let checkResult: CheckResult;
+
+    try {
+      if (monitor.type === "tls") {
+        checkResult = await runTlsCheck(monitor.url, monitor.timeout_sec);
+      } else if (monitor.type === "keyword" && monitor.keyword) {
+        checkResult = await runKeywordCheck(monitor.url, monitor.keyword, monitor.timeout_sec);
+      } else {
+        // Default: HTTP check
+        checkResult = await runHttpCheck(monitor.url, monitor.expected_status, monitor.timeout_sec);
+      }
+    } catch (e) {
+      checkResult = {
+        status: "down",
+        httpStatus: null,
+        latencyMs: null,
+        error: `Unhandled error: ${String(e)}`,
+        keywordFound: null,
+        tlsDaysRemaining: null,
+      };
+    }
+
+    console.log(`[cloud] Monitor "${monitor.name}" → ${checkResult.status} (${checkResult.latencyMs}ms)`);
+
+    // Simpan hasil check ke cloud_check_results
+    await queryNeon(
+      databaseUrl,
+      `INSERT INTO cloud_check_results
+         (id, monitor_id, status, http_status, latency_ms, error, keyword_found, tls_days_remaining, checked_at)
+       VALUES
+         (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, NOW())`,
+      [
+        monitor.id,
+        checkResult.status,
+        checkResult.httpStatus,
+        checkResult.latencyMs,
+        checkResult.error,
+        checkResult.keywordFound,
+        checkResult.tlsDaysRemaining,
+      ]
+    );
+
+    // Update cloud_monitors: lastStatus, lastCheckedAt, lastLatencyMs, nextCheckAt, tlsExpiresAt
+    const nextCheckAt = new Date(Date.now() + monitor.interval_sec * 1000).toISOString();
+    const tlsExpiresAt = checkResult.tlsDaysRemaining !== null
+      ? new Date(Date.now() + checkResult.tlsDaysRemaining * 86400000).toISOString()
+      : null;
+
+    await queryNeon(
+      databaseUrl,
+      `UPDATE cloud_monitors
+       SET last_status = $1,
+           last_checked_at = NOW(),
+           last_latency_ms = $2,
+           next_check_at = $3,
+           tls_expires_at = COALESCE($4::timestamptz, tls_expires_at),
+           updated_at = NOW()
+       WHERE id = $5`,
+      [
+        checkResult.status,
+        checkResult.latencyMs,
+        nextCheckAt,
+        tlsExpiresAt,
+        monitor.id,
+      ]
+    );
+
+    // ── Deteksi transisi status dan kirim notifikasi ─────────────────────────
+    // Hanya kirim jika: sebelumnya bukan 'unknown' DAN status berubah
+    const prevStatus = monitor.last_status;
+    const newStatus = checkResult.status;
+    const isTransition = prevStatus !== "unknown" && prevStatus !== newStatus;
+
+    if (isTransition) {
+      const isDown = newStatus === "down";
+      const emoji = isDown ? "🔴" : "🟢";
+      const label = isDown ? "DOWN" : "RECOVERED";
+      const typeLabel = monitor.type === "tls" ? "TLS" : monitor.type === "keyword" ? "Keyword" : "HTTP";
+
+      let message = `${emoji} *[${label}]* Cloud Monitor Alert\n`;
+      message += `Monitor: *${monitor.name}*\n`;
+      message += `URL: ${monitor.url}\n`;
+      message += `Type: ${typeLabel}\n`;
+      if (checkResult.latencyMs !== null) {
+        message += `Latency: ${checkResult.latencyMs}ms\n`;
+      }
+      if (isDown && checkResult.error) {
+        message += `Error: ${checkResult.error}\n`;
+      }
+      if (!isDown && checkResult.latencyMs !== null) {
+        message += `Response time: ${checkResult.latencyMs}ms`;
+      }
+
+      // Buat/resolve incident sederhana untuk cloud monitor
+      // Cek apakah ada open incident untuk monitor ini
+      const existingIncidentRes = await queryNeon(
+        databaseUrl,
+        `SELECT id FROM incidents
+         WHERE agent_id IS NULL
+           AND project_id = $1
+           AND type = 'monitor_down'
+           AND status = 'open'
+           AND metadata->>'monitor_id' = $2
+         LIMIT 1`,
+        [monitor.project_id, monitor.id]
+      );
+
+      let incidentId: string;
+
+      if (isDown) {
+        if (existingIncidentRes.rows.length === 0) {
+          // Buka incident baru
+          const incRes = await queryNeon(
+            databaseUrl,
+            `INSERT INTO incidents (id, project_id, agent_id, type, status, started_at, created_at, metadata)
+             VALUES (gen_random_uuid(), $1, NULL, 'monitor_down', 'open', NOW(), NOW(), $2::jsonb)
+             RETURNING id`,
+            [monitor.project_id, JSON.stringify({ monitor_id: monitor.id, monitor_name: monitor.name, url: monitor.url })]
+          );
+          incidentId = (incRes.rows[0] as { id: string }).id;
+          console.log(`[cloud] Opened incident ${incidentId} for monitor "${monitor.name}"`);
+        } else {
+          // Incident sudah ada, pakai ID-nya untuk alert_event
+          incidentId = (existingIncidentRes.rows[0] as { id: string }).id;
+        }
+      } else {
+        // Monitor pulih — resolve incident open jika ada
+        if (existingIncidentRes.rows.length > 0) {
+          incidentId = (existingIncidentRes.rows[0] as { id: string }).id;
+          await queryNeon(
+            databaseUrl,
+            `UPDATE incidents SET status = 'resolved', resolved_at = NOW() WHERE id = $1`,
+            [incidentId]
+          );
+          console.log(`[cloud] Resolved incident ${incidentId} for monitor "${monitor.name}"`);
+        } else {
+          // Tidak ada incident open, buat placeholder untuk alert_event
+          const incRes = await queryNeon(
+            databaseUrl,
+            `INSERT INTO incidents (id, project_id, agent_id, type, status, started_at, resolved_at, created_at, metadata)
+             VALUES (gen_random_uuid(), $1, NULL, 'monitor_down', 'resolved', NOW(), NOW(), NOW(), $2::jsonb)
+             RETURNING id`,
+            [monitor.project_id, JSON.stringify({ monitor_id: monitor.id, monitor_name: monitor.name, url: monitor.url })]
+          );
+          incidentId = (incRes.rows[0] as { id: string }).id;
+        }
+      }
+
+      // Dispatch ke semua channel notifikasi project
+      try {
+        await dispatchNotifications(
+          databaseUrl,
+          monitor.project_id,
+          incidentId,
+          message,
+          isDown ? "offline" : "online"
+        );
+        console.log(`[cloud] Dispatched ${label} notification for monitor "${monitor.name}"`);
+      } catch (e) {
+        console.error(`[cloud] Notification dispatch failed for "${monitor.name}": ${e}`);
+      }
+    }
+  });
+
+  // Promise.allSettled → jangan biarkan satu monitor yang gagal membatalkan yang lain
+  const results = await Promise.allSettled(checkPromises);
+  const failed = results.filter(r => r.status === "rejected");
+  if (failed.length > 0) {
+    console.error(`[cloud] ${failed.length} monitor checks failed:`, failed);
   }
 }
 
@@ -374,15 +759,34 @@ export default {
         }
       }
 
-      // ── STEP 3: Retention Cleanup ──────────────────────────────────────────────────
+      // ── STEP 3: Retention Cleanup — metric_buckets (7 hari) ─────────────────
       try {
         await queryNeon(
           env.DATABASE_URL,
           `DELETE FROM metric_buckets WHERE bucket_start < NOW() - INTERVAL '7 days'`
         );
-        console.log(`[evaluator] Retention cleanup complete (7 days)`);
+        console.log(`[evaluator] Retention cleanup metric_buckets complete (7 days)`);
       } catch (e) {
         console.error("[evaluator] Retention cleanup error:", e);
+      }
+
+      // ── STEP 4: Cloud Monitor Checks (Phase 5) ────────────────────────────────
+      try {
+        await runCloudChecks(env.DATABASE_URL);
+        console.log(`[evaluator] Cloud checks complete`);
+      } catch (e) {
+        console.error("[evaluator] Cloud checks error:", e);
+      }
+
+      // ── STEP 5: Retention Cleanup — cloud_check_results (30 hari) ────────────
+      try {
+        await queryNeon(
+          env.DATABASE_URL,
+          `DELETE FROM cloud_check_results WHERE checked_at < NOW() - INTERVAL '30 days'`
+        );
+        console.log(`[evaluator] Retention cleanup cloud_check_results complete (30 days)`);
+      } catch (e) {
+        console.error("[evaluator] Cloud results retention error:", e);
       }
 
       console.log("[evaluator] Evaluation complete");

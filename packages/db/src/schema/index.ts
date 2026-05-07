@@ -1,3 +1,11 @@
+/**
+ * Tujuan: Single source of truth untuk semua tabel Drizzle ORM
+ * Caller: packages/db/src/index.ts (getDb), apps/web API handlers, drizzle-kit migrate
+ * Dependensi: drizzle-orm/pg-core
+ * Main Functions: Semua export tabel (users, projects, agents, agent_state, metric_buckets, incidents, notification_channels, alert_events, status_pages, cloud_monitors, cloud_check_results)
+ * Side Effects: Tidak ada — hanya schema definition
+ */
+
 import {
   pgTable,
   text,
@@ -11,6 +19,8 @@ import {
   index,
   uniqueIndex,
   json,
+  smallint,
+  doublePrecision,
 } from "drizzle-orm/pg-core";
 
 // ─── Users ────────────────────────────────────────────────────────────────────
@@ -245,6 +255,98 @@ export const statusPages = pgTable(
   },
   (table) => [
     uniqueIndex("idx_status_pages_project").on(table.projectId),
+  ]
+);
+
+// ─── Cloud Monitors (Phase 5) ─────────────────────────────────────────────────
+// Menyimpan definisi monitor HTTP/TLS/Keyword per project.
+// Satu row = satu URL yang dimonitor.
+// Index pada project_id untuk query project-scoped yang efisien.
+// Index pada next_check_at agar evaluator bisa query batch monitor yang sudah jatuh tempo
+// tanpa full table scan.
+
+export const cloudMonitors = pgTable(
+  "cloud_monitors",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    url: text("url").notNull(),
+    // Tipe check: http | tls | keyword
+    type: text("type").notNull().default("http"),
+    // Interval check dalam detik (default 60 = 1 menit)
+    intervalSec: smallint("interval_sec").notNull().default(60),
+    // Timeout request dalam detik
+    timeoutSec: smallint("timeout_sec").notNull().default(10),
+    // keyword check: cari string ini di response body
+    keyword: text("keyword"),
+    // Kode HTTP yang dianggap sukses (default 200), nullable = any 2xx
+    expectedStatus: smallint("expected_status"),
+    // Status monitor: active | paused
+    status: text("status").notNull().default("active"),
+    // Status hasil check terakhir: up | down | unknown
+    lastStatus: text("last_status").notNull().default("unknown"),
+    // Kapan check berikutnya harus dijalankan (evaluator pakai ini)
+    nextCheckAt: timestamp("next_check_at", { withTimezone: true }),
+    // Waktu check terakhir
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+    // Latensi check terakhir dalam ms
+    lastLatencyMs: integer("last_latency_ms"),
+    // Tanggal expired TLS (hanya relevan untuk type=tls)
+    tlsExpiresAt: timestamp("tls_expires_at", { withTimezone: true }),
+    // Apakah muncul di status page
+    showOnStatusPage: boolean("show_on_status_page").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_cloud_monitors_project_id").on(table.projectId),
+    index("idx_cloud_monitors_next_check").on(table.nextCheckAt),
+    index("idx_cloud_monitors_status").on(table.status),
+  ]
+);
+
+// ─── Cloud Check Results (Phase 5) ───────────────────────────────────────────
+// Log hasil setiap run check cloud monitor.
+// Anti-boros: disimpan dengan retention 30 hari, bukan selamanya.
+// Index pada (monitor_id, checked_at) untuk query history per monitor.
+// Tidak menyimpan raw response body untuk hemat storage.
+
+export const cloudCheckResults = pgTable(
+  "cloud_check_results",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    monitorId: uuid("monitor_id")
+      .notNull()
+      .references(() => cloudMonitors.id, { onDelete: "cascade" }),
+    // Status hasil: up | down
+    status: text("status").notNull(),
+    // HTTP status code yang dikembalikan (null jika timeout/conn error)
+    httpStatus: smallint("http_status"),
+    // Latensi dalam milidetik
+    latencyMs: integer("latency_ms"),
+    // Pesan error jika gagal
+    error: text("error"),
+    // Apakah keyword ditemukan (null jika bukan keyword check)
+    keywordFound: boolean("keyword_found"),
+    // Hari tersisa sebelum TLS expired (null jika bukan TLS check)
+    tlsDaysRemaining: smallint("tls_days_remaining"),
+    checkedAt: timestamp("checked_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_cloud_check_results_monitor_time").on(
+      table.monitorId,
+      table.checkedAt
+    ),
+    index("idx_cloud_check_results_status").on(table.status),
   ]
 );
 

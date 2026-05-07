@@ -5,6 +5,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.2-beta.3] - 2026-05-07
+
+### Added
+- **Cloud Monitors**: Added HTTP/TLS/Keyword cloud monitoring capability so users can monitor external URLs for uptime, SSL certificate health, and keyword presence — without requiring an agent.
+- **Global Agent Distribution Map**: Added an interactive global map (`GlobalAgentMap`) to the Dashboard Overview that highlights countries with active agents and displays an agent summary tooltip on hover.
+- Added `cloud_monitors` and `cloud_check_results` tables in the database with appropriate indexes.
+- Implemented `runHttpCheck`, `runTlsCheck`, and `runKeywordCheck` in the Cloudflare Worker to process checks in parallel.
+- Cloud Monitors management UI in the Settings page with full CRUD, real-time status badges, TLS expiry warnings, and latency sparkline charts.
+
+### Changed
+- Dashboard Overview now integrates Cloud Monitors statistics (Total, Online, Offline) alongside Agent nodes.
+- Refactored Cloud Monitors UI latency chart to use `AreaChart` with vibrant glassmorphism gradients for better visibility in Dark Mode.
+- All monitor events (up/down) now automatically generate incidents and dispatch notifications via existing alert channels.
+
+---
+
 ## [0.1.2-beta.2] - 2026-05-07
 
 ### Added

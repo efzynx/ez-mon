@@ -15,6 +15,7 @@ import {
   Menu,
   Search,
   HelpCircle,
+  MonitorCheck,
 } from "lucide-react";
 import { useState } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -37,6 +38,7 @@ const navItems = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/dashboard/agents", label: "Agents", icon: Server },
   { href: "/dashboard/incidents", label: "Incidents", icon: AlertTriangle },
+  { href: "/dashboard/monitors", label: "Monitors", icon: MonitorCheck },
   { href: "/dashboard/status-page", label: "Status Page", icon: Globe },
 ];
 

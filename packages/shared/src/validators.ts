@@ -1,3 +1,13 @@
+/**
+ * Tujuan: Shared Zod validators untuk semua boundary request/response EZMON
+ * Caller: apps/web API handlers (agent, dashboard), apps/worker (indirect via types)
+ * Dependensi: zod
+ * Main Functions: registerAgentSchema, heartbeatSchema, metricsSchema, createProjectSchema,
+ *   createNotificationChannelSchema, loginSchema, registerSchema, saveStatusPageSchema,
+ *   createCloudMonitorSchema, updateCloudMonitorSchema
+ * Side Effects: Tidak ada
+ */
+
 import { z } from "zod";
 
 // ─── Agent Registration ──────────────────────────────────────────────────────
@@ -129,3 +139,53 @@ export const saveStatusPageSchema = z.object({
 });
 
 export type SaveStatusPageInput = z.infer<typeof saveStatusPageSchema>;
+
+// ─── Cloud Monitor (Phase 5) ──────────────────────────────────────────────────
+
+export const createCloudMonitorSchema = z.object({
+  projectId: z.string().uuid("Invalid project ID"),
+  name: z.string().min(1, "Name is required").max(100),
+  url: z
+    .string()
+    .url("Must be a valid URL")
+    .regex(/^https?:\/\//, "URL must start with http:// or https://"),
+  // Tipe check: http (status code), tls (cert expiry), keyword (body contains)
+  type: z.enum(["http", "tls", "keyword"]).default("http"),
+  // Interval check minimum 30 detik, max 1 jam — free-tier friendly
+  intervalSec: z
+    .number()
+    .int()
+    .min(30, "Minimum interval is 30 seconds")
+    .max(3600, "Maximum interval is 1 hour")
+    .default(60),
+  // Timeout max 30 detik
+  timeoutSec: z
+    .number()
+    .int()
+    .min(3, "Minimum timeout is 3 seconds")
+    .max(30, "Maximum timeout is 30 seconds")
+    .default(10),
+  // Hanya wajib jika type=keyword
+  keyword: z.string().max(200).optional(),
+  // Expected HTTP status code — null berarti any 2xx
+  expectedStatus: z.number().int().min(100).max(599).optional().nullable(),
+  showOnStatusPage: z.boolean().default(true),
+});
+
+export type CreateCloudMonitorInput = z.infer<typeof createCloudMonitorSchema>;
+
+export const updateCloudMonitorSchema = z.object({
+  id: z.string().uuid("Invalid monitor ID"),
+  name: z.string().min(1).max(100).optional(),
+  url: z.string().url().optional(),
+  type: z.enum(["http", "tls", "keyword"]).optional(),
+  intervalSec: z.number().int().min(30).max(3600).optional(),
+  timeoutSec: z.number().int().min(3).max(30).optional(),
+  keyword: z.string().max(200).optional().nullable(),
+  expectedStatus: z.number().int().min(100).max(599).optional().nullable(),
+  // active | paused
+  status: z.enum(["active", "paused"]).optional(),
+  showOnStatusPage: z.boolean().optional(),
+});
+
+export type UpdateCloudMonitorInput = z.infer<typeof updateCloudMonitorSchema>;

@@ -6,6 +6,7 @@ import {
   agentState,
   incidents,
   projects,
+  cloudMonitors,
   eq,
   and,
 } from "@ezmon/db";
@@ -150,11 +151,23 @@ export async function GET(req: NextRequest) {
       })
     );
 
+    // Get cloud monitors for the project
+    const monitorRows = await db()
+      .select({ status: cloudMonitors.lastStatus })
+      .from(cloudMonitors)
+      .where(eq(cloudMonitors.projectId, projectId));
+
+    const onlineMonitorsCount = monitorRows.filter(m => m.status === "up").length;
+    const offlineMonitorsCount = monitorRows.filter(m => m.status === "down").length;
+
     const overview: DashboardOverview = {
       totalAgents: dashboardAgents.length,
       onlineAgents: onlineCount,
       offlineAgents: offlineCount,
       unknownAgents: unknownCount,
+      totalMonitors: monitorRows.length,
+      onlineMonitors: onlineMonitorsCount,
+      offlineMonitors: offlineMonitorsCount,
       openIncidents: openIncidentRows.length,
       recentIncidents,
       agents: dashboardAgents,
