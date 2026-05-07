@@ -5,61 +5,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [0.1.2-beta.3] - 2026-05-07
+## [0.1.2] - 2026-05-07
 
 ### Added
 - **Cloud Monitors**: Added HTTP/TLS/Keyword cloud monitoring capability so users can monitor external URLs for uptime, SSL certificate health, and keyword presence — without requiring an agent.
 - **Global Agent Distribution Map**: Added an interactive global map (`GlobalAgentMap`) to the Dashboard Overview that highlights countries with active agents and displays an agent summary tooltip on hover.
-- Added `cloud_monitors` and `cloud_check_results` tables in the database with appropriate indexes.
-- Implemented `runHttpCheck`, `runTlsCheck`, and `runKeywordCheck` in the Cloudflare Worker to process checks in parallel.
-- Cloud Monitors management UI in the Settings page with full CRUD, real-time status badges, TLS expiry warnings, and latency sparkline charts.
-
-### Changed
-- Dashboard Overview now integrates Cloud Monitors statistics (Total, Online, Offline) alongside Agent nodes.
-- Refactored Cloud Monitors UI latency chart to use `AreaChart` with vibrant glassmorphism gradients for better visibility in Dark Mode.
-- All monitor events (up/down) now automatically generate incidents and dispatch notifications via existing alert channels.
-
----
-
-## [0.1.2-beta.2] - 2026-05-07
-
-### Added
 - **Public Status Page**: Added a customizable public status page with themes, descriptions, and manual agent visibility toggling.
 - **Docker Collector**: The Go Agent now collects the count of running Docker containers using `os/exec` to run `docker ps -q`.
 - **Global Agent Tags**: Implemented a "Tag-First" architecture centrally managed from the Dashboard Settings. Tags can be bulk-assigned to multiple agents simultaneously.
 - **Cascading Tag Deletion**: Deleting a project-level tag automatically unassigns it from all associated agents.
 - **Onboarding Empty State**: Replaced the "No agents yet" screen on the Dashboard Overview with an interactive, huge Call-To-Action that directly opens the installation command modal.
+- Added `cloud_monitors` and `cloud_check_results` tables in the database with appropriate indexes.
+- Implemented `runHttpCheck`, `runTlsCheck`, and `runKeywordCheck` in the Cloudflare Worker to process checks in parallel.
+- Versioned agent binary names in GitHub Releases: `ezmon-agent-linux-amd64-v{version}` and `ezmon-agent-linux-arm64-v{version}`.
 
 ### Changed
+- Dashboard Overview now integrates Cloud Monitors statistics (Total, Online, Offline) alongside Agent nodes.
+- Refactored Cloud Monitors UI latency chart to use `AreaChart` with vibrant glassmorphism gradients for better visibility in Dark Mode.
+- All monitor events (up/down) now automatically generate incidents and dispatch notifications via existing alert channels.
 - Dashboard Overview, Agent List, and Agent Detail UI now display the number of running Docker containers if applicable.
 - `InstallModal` was extracted to a shared global component for usage across multiple dashboard routes.
 - `Alert Channels` configuration (Telegram, Discord, Webhook) was moved to a dedicated tab inside the unified Settings page.
 - Swapped `Status Page` and `Settings` positions in the sidebar navigation to align with standard UI hierarchy.
+- Agent `Version` variable changed from `const` to `var` to allow linker injection via `-ldflags="-X main.Version=x.y.z"` at build time.
+- Agent `Version` default fallback changed from a hardcoded version string to `"dev"`.
+- Delete agent modal text and `latest` release description translated from Indonesian to English.
+- `install.sh` registration call now reads from `EZMON_AGENT_VERSION` env var (defaults to current release version).
 
 ### Fixed
 - Infinite loading bug on `/dashboard/status-page` configuration view by correctly fetching projects on mount.
-- TypeScript errors in the status page by replacing `sonner` toast with local state management and correctly handling Shadcn UI `<Button>` component props.
-
----
-
-## [0.1.2-beta.1] - 2026-05-07
-
-### Added
-- Versioned agent binary names in GitHub Releases: `ezmon-agent-linux-amd64-v{version}` and `ezmon-agent-linux-arm64-v{version}`.
-- Both versioned and unversioned binary copies uploaded per release: versioned for direct download, unversioned for `install.sh` compatibility via rolling `latest` release.
-
-### Changed
-- Agent `Version` variable changed from `const` to `var` to allow linker injection via `-ldflags="-X main.Version=x.y.z"` at build time.
-- Agent `Version` default fallback changed from a hardcoded version string to `"dev"` to clearly distinguish local builds from production binaries.
-- `apps/web/package.json` version bumped to stay in sync with root `package.json`.
-- Delete agent modal text translated from Indonesian to English (warning message and uninstall steps heading).
-- `install.sh` registration call no longer hardcodes agent version; now reads from `EZMON_AGENT_VERSION` env var (defaults to current release version).
-- Release workflow build step now also creates unversioned binary copies alongside versioned ones.
-- Rolling `latest` release description translated to English.
-
-### Fixed
-- Sidebar version badge showing `v0.1.0` instead of the current version — now reads from `apps/web/package.json` which is kept in sync with root.
-- Agent binary in GitHub Releases had no version in the filename, making it hard to identify which version was downloaded.
+- TypeScript errors in the status page by replacing `sonner` toast with local state management.
+- Sidebar version badge showing stale version — now reads dynamically from `apps/web/package.json`.
+- Agent binary in GitHub Releases had no version in the filename.
 - Hardcoded `"0.1.0"` version string in `install.sh` curl registration payload.
 
 ---
