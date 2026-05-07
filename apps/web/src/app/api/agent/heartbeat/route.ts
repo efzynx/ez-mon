@@ -63,21 +63,18 @@ export async function POST(req: NextRequest) {
       req.headers.get("x-real-ip") ||
       null;
 
-    // Geo: prefer Vercel headers, else use agent-reported public IP for lookup
-    let country = req.headers.get("x-vercel-ip-country") || agent.country;
-    let city = req.headers.get("x-vercel-ip-city") || agent.city;
-    let latStr = req.headers.get("x-vercel-ip-latitude");
-    let lonStr = req.headers.get("x-vercel-ip-longitude");
-    let lat = latStr ? parseFloat(latStr) : agent.lat;
-    let lon = lonStr ? parseFloat(lonStr) : agent.lon;
+    // Geo: Prefer agent-reported public IP + ip-api.com for accurate location over Vercel's edge network headers
+    let country = agent.country;
+    let city = agent.city;
+    let lat = agent.lat;
+    let lon = agent.lon;
 
-    // Use the agent's self-reported public IP for geo lookup (works for localhost too)
     const geoTargetIp = agentPublicIp || clientIp;
     const isLocalhost = !geoTargetIp || geoTargetIp === "127.0.0.1" || geoTargetIp === "::1" || geoTargetIp.startsWith("192.168.") || geoTargetIp.startsWith("10.");
     const ipChanged = geoTargetIp !== agent.lastIp && geoTargetIp !== null;
     const needsGeo = !country || lat === null || ipChanged;
 
-    if (needsGeo && !isLocalhost && !req.headers.get("x-vercel-ip-country")) {
+    if (needsGeo && !isLocalhost) {
       try {
         const geoRes = await fetch(`http://ip-api.com/json/${geoTargetIp}?fields=status,countryCode,city,lat,lon`);
         if (geoRes.ok) {
@@ -92,6 +89,16 @@ export async function POST(req: NextRequest) {
       } catch (e) {
         console.error("[heartbeat] IP geolocation fallback failed:", e);
       }
+    }
+
+    // Fallback to Vercel headers if ip-api fails or returns nothing
+    if (!country) {
+      country = req.headers.get("x-vercel-ip-country") || country;
+      city = req.headers.get("x-vercel-ip-city") || city;
+      let latStr = req.headers.get("x-vercel-ip-latitude");
+      let lonStr = req.headers.get("x-vercel-ip-longitude");
+      lat = latStr ? parseFloat(latStr) : lat;
+      lon = lonStr ? parseFloat(lonStr) : lon;
     }
 
     // Update agent state
