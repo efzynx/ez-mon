@@ -112,23 +112,35 @@ function GlobalProjectSwitcher() {
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/dashboard/projects").then(res => res.json()).then(data => {
-      if (data.success && data.data.length > 0) {
-        setProjects(data.data);
-        const savedId = localStorage.getItem("ezmon_active_project");
-        const isValid = data.data.some((p: any) => p.id === savedId);
-        setSelectedProject(isValid && savedId ? savedId : data.data[0].id);
-      }
-    });
+    const loadProjects = () => {
+      fetch("/api/dashboard/projects", { cache: "no-store" }).then(res => res.json()).then(data => {
+        if (data.success) {
+          setProjects(data.data);
+          if (data.data.length > 0) {
+            const savedId = localStorage.getItem("ezmon_active_project");
+            const isValid = data.data.some((p: any) => p.id === savedId);
+            setSelectedProject(isValid && savedId ? savedId : data.data[0].id);
+          }
+        }
+      });
+    };
+
+    loadProjects();
 
     const handleProjectChange = (e: any) => {
       if (e.detail?.id) setSelectedProject(e.detail.id);
     };
+    
     window.addEventListener("ezmon_project_changed", handleProjectChange as EventListener);
-    return () => window.removeEventListener("ezmon_project_changed", handleProjectChange as EventListener);
+    window.addEventListener("ezmon_projects_updated", loadProjects);
+    
+    return () => {
+      window.removeEventListener("ezmon_project_changed", handleProjectChange as EventListener);
+      window.removeEventListener("ezmon_projects_updated", loadProjects);
+    };
   }, []);
 
-  if (projects.length <= 1) return <Badge variant="outline" className="hidden sm:inline-flex font-mono text-[10px] bg-muted/30">PROD</Badge>;
+  if (projects.length === 0) return <Badge variant="outline" className="hidden sm:inline-flex font-mono text-[10px] bg-muted/30">NO PROJECT</Badge>;
 
   return (
     <select

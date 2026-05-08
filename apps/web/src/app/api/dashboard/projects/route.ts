@@ -4,6 +4,8 @@ import { db } from "@/lib/db";
 import { projects, eq, and } from "@ezmon/db";
 import { createProjectSchema, updateProjectNameSchema } from "@ezmon/shared";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const session = await auth();

@@ -19,3 +19,6 @@ crons = ["* * * * *"]
 [env.beta]
 name = "ezmon-evaluator-beta"
 # Schedule and other configs are inherited from the base configuration
+
+[env.beta.vars]
+# Variables for beta (empty for now, as we use secrets)

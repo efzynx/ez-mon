@@ -331,6 +331,7 @@ export default function SettingsPage() {
       const data = await res.json();
       if (data.success) {
         setProjects((p) => [...p, data.data]);
+        window.dispatchEvent(new CustomEvent("ezmon_projects_updated"));
         setShowCreate(false); setName(""); setSlug("");
       } else setError(data.error || "Failed");
     } finally { setSaving(false); }
@@ -348,6 +349,7 @@ export default function SettingsPage() {
       const data = await res.json();
       if (data.success) {
         setProjects(p => p.map(x => x.id === editingProject.id ? { ...x, name: editingProject.name.trim() } : x));
+        window.dispatchEvent(new CustomEvent("ezmon_projects_updated"));
         setShowEditProjectModal(false);
       } else {
         alert(data.error || "Failed to update project name");
@@ -369,6 +371,7 @@ export default function SettingsPage() {
       const data = await res.json();
       if (data.success) {
         setProjects(p => p.filter(x => x.id !== id));
+        window.dispatchEvent(new CustomEvent("ezmon_projects_updated"));
         if (activeProjectId === id) {
           const rem = projects.filter(x => x.id !== id);
           if (rem.length > 0) handleSetActiveProject(rem[0].id);
