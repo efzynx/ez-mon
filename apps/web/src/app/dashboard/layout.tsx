@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { SessionProvider } from "next-auth/react";
@@ -49,6 +50,7 @@ function SidebarNav({ isMobile = false, closeMenu = () => {} }) {
     <div className="flex flex-col h-full bg-card/40 backdrop-blur-3xl border-r border-border/50">
       <div className="px-6 mb-8 flex flex-col gap-1 hidden md:flex h-16 justify-center border-b border-border/50">
         <Link href="/dashboard" className="flex items-center gap-2">
+          <Image src="/logo-nobg.svg" alt="EZMON Logo" width={28} height={28} className="object-contain" />
           <span className="text-foreground font-display font-black tracking-widest text-lg">EZMON</span>
         </Link>
         <span className="text-muted-foreground text-[10px] font-mono">v{pkg.version}</span>
@@ -57,6 +59,7 @@ function SidebarNav({ isMobile = false, closeMenu = () => {} }) {
       {isMobile && (
         <div className="px-6 my-6 flex flex-col gap-1 md:hidden">
           <Link href="/dashboard" className="flex items-center gap-2" onClick={closeMenu}>
+            <Image src="/logo-nobg.svg" alt="EZMON Logo" width={28} height={28} className="object-contain" />
             <span className="text-foreground font-display font-black tracking-widest text-xl">EZMON</span>
           </Link>
           <span className="text-muted-foreground text-xs font-mono">v{pkg.version}</span>
@@ -121,7 +124,10 @@ function TopAppBar() {
             </SheetContent>
           </Sheet>
         </div>
-        <span className="text-xl font-display font-bold tracking-tighter text-foreground md:hidden">EZMON</span>
+        <div className="flex items-center gap-2 md:hidden">
+          <Image src="/logo-nobg.svg" alt="EZMON Logo" width={24} height={24} className="object-contain" />
+          <span className="text-xl font-display font-bold tracking-tighter text-foreground">EZMON</span>
+        </div>
       </div>
 
       <div className="flex items-center gap-4">
