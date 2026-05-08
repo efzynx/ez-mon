@@ -150,6 +150,13 @@ export const saveStatusPageSchema = z.object({
   title: z.string().min(1, "Title is required").max(100),
   description: z.string().max(500).optional().nullable(),
   published: z.boolean(),
+  customSlug: z
+    .string()
+    .min(2, "Slug must be at least 2 characters")
+    .max(60, "Slug must be at most 60 characters")
+    .regex(/^[a-z0-9-]+$/, "Slug may only contain lowercase letters, numbers, and hyphens")
+    .optional()
+    .nullable(),
 });
 
 export type SaveStatusPageInput = z.infer<typeof saveStatusPageSchema>;

@@ -246,6 +246,8 @@ export const statusPages = pgTable(
     title: text("title").notNull().default("System Status"),
     description: text("description"),
     published: boolean("published").notNull().default(false),
+    // Custom URL slug, e.g. /status/my-server. Falls back to project.slug if null.
+    customSlug: text("custom_slug").unique(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -255,6 +257,7 @@ export const statusPages = pgTable(
   },
   (table) => [
     uniqueIndex("idx_status_pages_project").on(table.projectId),
+    uniqueIndex("idx_status_pages_custom_slug").on(table.customSlug),
   ]
 );
 

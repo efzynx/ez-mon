@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.3-beta.2] - 2026-05-08
+
+### Added
+- **Custom Status Page Slug**: Added `custom_slug` column to `status_pages` table and enabled users to configure custom URLs (e.g., `/status/my-server`) from the Dashboard Settings.
+- **Cloud Monitors on Status Page**: The Public Status Page now explicitly queries and displays Cloud Monitors (HTTP/TLS/Keyword) alongside standard Agents, including latency information.
+- **Beta Worker Environment**: Configured `[env.beta]` inside `apps/worker/wrangler.toml` to support separate deployment and secrets for the beta environment (`ezmon-evaluator-beta`).
+
+---
+
 ## [0.1.3-beta.1] - 2026-05-08
 
 ### Fixed

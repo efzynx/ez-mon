@@ -47,6 +47,7 @@ export async function GET(req: NextRequest) {
         title: pageConfig[0].title,
         description: pageConfig[0].description,
         published: pageConfig[0].published,
+        customSlug: pageConfig[0].customSlug ?? null,
         createdAt: pageConfig[0].createdAt.toISOString(),
         updatedAt: pageConfig[0].updatedAt.toISOString(),
       } : null
@@ -71,7 +72,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Invalid input", issues: result.error.issues }, { status: 400 });
     }
 
-    const { projectId, title, description, published } = result.data;
+    const { projectId, title, description, published, customSlug } = result.data;
+
+    // Check if customSlug is already taken by a different project's status page
+    if (customSlug) {
+      const slugConflict = await db()
+        .select({ id: statusPages.id, projectId: statusPages.projectId })
+        .from(statusPages)
+        .where(eq(statusPages.customSlug, customSlug))
+        .limit(1);
+
+      if (slugConflict.length > 0 && slugConflict[0].projectId !== projectId) {
+        return NextResponse.json({ success: false, error: "Slug already in use by another project" }, { status: 409 });
+      }
+    }
 
     const project = await db()
       .select({ id: projects.id })
@@ -93,7 +107,7 @@ export async function POST(req: NextRequest) {
     if (existing.length > 0) {
       await db()
         .update(statusPages)
-        .set({ title, description, published, updatedAt: new Date() })
+        .set({ title, description, published, customSlug: customSlug ?? null, updatedAt: new Date() })
         .where(eq(statusPages.id, existing[0].id));
     } else {
       await db()
@@ -102,7 +116,8 @@ export async function POST(req: NextRequest) {
           projectId,
           title,
           description,
-          published
+          published,
+          customSlug: customSlug ?? null,
         });
     }
 

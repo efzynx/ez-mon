@@ -15,3 +15,7 @@ crons = ["* * * * *"]
 # [secrets]
 # DATABASE_URL - Neon connection string
 # WORKER_SECRET - shared secret for hub API auth (optional)
+
+[env.beta]
+name = "ezmon-evaluator-beta"
+# Schedule and other configs are inherited from the base configuration

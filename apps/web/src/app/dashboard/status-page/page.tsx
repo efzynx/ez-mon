@@ -32,6 +32,8 @@ export default function StatusPageSettings() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [published, setPublished] = useState(false);
+  const [customSlug, setCustomSlug] = useState("");
+  const [slugError, setSlugError] = useState("");
 
   // Project slug for preview link
   const [projectSlug, setProjectSlug] = useState("");
@@ -82,11 +84,13 @@ export default function StatusPageSettings() {
           setTitle(json.data.title);
           setDescription(json.data.description || "");
           setPublished(json.data.published);
+          setCustomSlug(json.data.customSlug || "");
         } else {
           setConfig(null);
           setTitle("");
           setDescription("");
           setPublished(false);
+          setCustomSlug("");
         }
       } catch (error) {
         console.error("Failed to fetch status page config:", error);
@@ -132,6 +136,13 @@ export default function StatusPageSettings() {
 
   const handleSave = async () => {
     if (!projectId) return;
+    setSlugError("");
+
+    // Validate slug format client-side
+    if (customSlug && !/^[a-z0-9-]+$/.test(customSlug)) {
+      setSlugError("Slug may only contain lowercase letters, numbers, and hyphens");
+      return;
+    }
     setSaving(true);
     
     try {
@@ -143,6 +154,7 @@ export default function StatusPageSettings() {
           title: title || "System Status",
           description,
           published,
+          customSlug: customSlug.trim() || null,
         }),
       });
       
@@ -180,7 +192,7 @@ export default function StatusPageSettings() {
         </div>
         <div className="flex items-center gap-4">
           {projectSlug && published && (
-            <Button variant="outline" className="border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300" onClick={() => window.open(`/status/${projectSlug}`, "_blank")}>
+            <Button variant="outline" className="border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300" onClick={() => window.open(`/status/${customSlug.trim() || projectSlug}`, "_blank")}>
               View Public Page
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="ml-2 h-4 w-4"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
             </Button>
@@ -210,6 +222,22 @@ export default function StatusPageSettings() {
               placeholder="e.g., EZMON System Status" 
               className="bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600"
             />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-slate-300">Custom URL Slug <span className="text-slate-500 font-normal">(optional)</span></label>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 font-mono shrink-0">/status/</span>
+              <Input
+                value={customSlug}
+                onChange={(e) => { setCustomSlug(e.target.value.toLowerCase()); setSlugError(""); }}
+                placeholder={projectSlug || "my-server"}
+                className="bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600 font-mono"
+              />
+            </div>
+            {slugError && <p className="text-xs text-destructive">{slugError}</p>}
+            <p className="text-xs text-slate-500">
+              Leave empty to use the project default: <code className="bg-slate-800 px-1 rounded">/status/{projectSlug}</code>
+            </p>
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium text-slate-300">Description (Optional)</label>
