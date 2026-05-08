@@ -47,7 +47,9 @@ export default function IncidentsPage() {
         const data = await res.json();
         if (data.success && data.data.length > 0) {
           setProjects(data.data);
-          setSelectedProject(data.data[0].id);
+          const savedId = localStorage.getItem("ezmon_active_project");
+          const isValid = data.data.some((p: any) => p.id === savedId);
+          setSelectedProject(isValid && savedId ? savedId : data.data[0].id);
         } else {
           setLoading(false);
         }
@@ -86,6 +88,15 @@ export default function IncidentsPage() {
 
   useEffect(() => {
     fetchIncidents();
+    
+    const handleProjectChange = (e: any) => {
+      if (e.detail?.id) {
+        setSelectedProject(e.detail.id);
+        setLoading(true);
+      }
+    };
+    window.addEventListener("ezmon_project_changed", handleProjectChange as EventListener);
+    return () => window.removeEventListener("ezmon_project_changed", handleProjectChange as EventListener);
   }, [fetchIncidents]);
 
   return (
@@ -106,20 +117,6 @@ export default function IncidentsPage() {
           </p>
         </div>
 
-        {/* Project selector */}
-        {projects.length > 1 && (
-          <select
-            value={selectedProject ?? ""}
-            onChange={(e) => setSelectedProject(e.target.value)}
-            className="bg-card border border-border rounded-md py-2 px-4 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-auto min-w-[160px]"
-          >
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        )}
       </div>
 
       {/* Filter Tabs */}

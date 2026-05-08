@@ -351,9 +351,23 @@ function AddMonitorModal({ projectId, onClose, onCreated }: AddMonitorModalProps
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function CloudMonitorsManagement({ projects }: { projects: Project[] }) {
-  const [selectedProject, setSelectedProject] = useState<string | null>(
-    projects[0]?.id ?? null
-  );
+  const [selectedProject, setSelectedProject] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (projects.length > 0 && !selectedProject) {
+      const savedId = localStorage.getItem("ezmon_active_project");
+      const isValid = projects.some(p => p.id === savedId);
+      setSelectedProject(isValid && savedId ? savedId : projects[0].id);
+    }
+  }, [projects, selectedProject]);
+
+  useEffect(() => {
+    const handleProjectChange = (e: any) => {
+      if (e.detail?.id) setSelectedProject(e.detail.id);
+    };
+    window.addEventListener("ezmon_project_changed", handleProjectChange as EventListener);
+    return () => window.removeEventListener("ezmon_project_changed", handleProjectChange as EventListener);
+  }, []);
   const [monitors, setMonitors] = useState<CloudMonitor[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
@@ -446,29 +460,28 @@ export function CloudMonitorsManagement({ projects }: { projects: Project[] }) {
   }
 
   return (
-    <div className="mt-2">
+    <div className="animate-fade-in space-y-6 pb-12">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h2 className="text-lg font-display font-semibold text-foreground/90">Cloud Monitors</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Monitor URLs for HTTP status, TLS/SSL health, or keyword presence. Max 20 per project.
+          <div className="flex items-center gap-2 text-muted-foreground mb-2 font-mono text-sm">
+            <span>Monitors</span>
+            <span className="text-xs">/</span>
+            <span className="text-foreground">External Services</span>
+          </div>
+          <h1 className="text-3xl font-display font-bold text-foreground mb-1">Cloud Monitors</h1>
+          <p className="text-muted-foreground text-sm">
+            Monitor external URLs for uptime and SSL health. Max 20 per project.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          {projects.length > 1 && (
-            <select
-              value={selectedProject || ""}
-              onChange={e => setSelectedProject(e.target.value)}
-              className="bg-card border border-border rounded-md py-1.5 px-3 text-sm text-foreground focus:outline-none focus:border-primary"
-            >
-              {projects.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          )}
-          <Button size="sm" className="h-8 gap-2" onClick={() => setShowAdd(true)}>
-            <Plus size={14} /> Add Monitor
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <Button 
+            disabled={!selectedProject}
+            className="gap-2 w-full md:w-auto" 
+            onClick={() => setShowAdd(true)}
+          >
+            <Plus size={18} />
+            Add Monitor
           </Button>
         </div>
       </div>

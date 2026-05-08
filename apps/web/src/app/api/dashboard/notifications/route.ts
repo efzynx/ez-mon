@@ -129,11 +129,11 @@ export async function PATCH(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { channelId, enabled, notifyOn } = body;
+    const { channelId, enabled, notifyOn, name, config } = body;
 
-    if (!channelId || (typeof enabled !== "boolean" && !notifyOn)) {
+    if (!channelId || (typeof enabled !== "boolean" && !notifyOn && !name && !config)) {
       return NextResponse.json(
-        { success: false, error: "channelId and at least one of enabled or notifyOn required" },
+        { success: false, error: "channelId and at least one field to update required" },
         { status: 400 }
       );
     }
@@ -146,6 +146,8 @@ export async function PATCH(req: NextRequest) {
     const setData: Record<string, unknown> = {};
     if (typeof enabled === "boolean") setData.enabled = enabled;
     if (notifyOn) setData.notifyOn = notifyOn;
+    if (name) setData.name = name;
+    if (config) setData.configJson = config;
 
     const result = await db()
       .update(notificationChannels)

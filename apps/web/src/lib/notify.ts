@@ -18,7 +18,7 @@ interface ChannelConfig {
   headers?: Record<string, string>;
 }
 
-async function sendTelegram(botToken: string, chatId: string, message: string): Promise<void> {
+export async function sendTelegram(botToken: string, chatId: string, message: string): Promise<void> {
   const resp = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -30,7 +30,7 @@ async function sendTelegram(botToken: string, chatId: string, message: string): 
   }
 }
 
-async function sendDiscord(webhookUrl: string, message: string): Promise<void> {
+export async function sendDiscord(webhookUrl: string, message: string): Promise<void> {
   const resp = await fetch(webhookUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -39,7 +39,7 @@ async function sendDiscord(webhookUrl: string, message: string): Promise<void> {
   if (!resp.ok) throw new Error(`Discord: ${resp.status}`);
 }
 
-async function sendWebhook(url: string, message: string, secret?: string, extraHeaders?: Record<string, string>): Promise<void> {
+export async function sendWebhook(url: string, message: string, secret?: string, extraHeaders?: Record<string, string>): Promise<void> {
   const headers: Record<string, string> = { "Content-Type": "application/json", ...extraHeaders };
   if (secret) headers["X-EZMON-Secret"] = secret;
   const resp = await fetch(url, {
@@ -59,11 +59,18 @@ export async function dispatchNotification({
   incidentId,
   message,
   eventType,
+  templateVars,
 }: {
   projectId: string;
   incidentId: string;
   message: string;
   eventType: EventType;
+  templateVars?: {
+    project: string;
+    agentOrMonitor: string;
+    status: string;
+    time: string;
+  };
 }): Promise<void> {
   const channels = await db()
     .select()
@@ -83,17 +90,30 @@ export async function dispatchNotification({
       continue;
     }
 
-    const cfg = (ch.configJson ?? {}) as ChannelConfig;
+    const cfg = (ch.configJson ?? {}) as any;
     let status = "sent";
     let error: string | null = null;
+    
+    let finalMessage = message;
+    if (templateVars) {
+      const template = eventType === "offline" ? cfg.customOfflineMessage : cfg.customOnlineMessage;
+      if (template) {
+        finalMessage = template
+          .replace(/{project}/g, templateVars.project)
+          .replace(/{agent}/g, templateVars.agentOrMonitor)
+          .replace(/{monitor}/g, templateVars.agentOrMonitor)
+          .replace(/{status}/g, templateVars.status)
+          .replace(/{time}/g, templateVars.time);
+      }
+    }
 
     try {
       if (ch.type === "telegram" && cfg.botToken && cfg.chatId) {
-        await sendTelegram(cfg.botToken, cfg.chatId, message);
+        await sendTelegram(cfg.botToken, cfg.chatId, finalMessage);
       } else if (ch.type === "discord" && cfg.webhookUrl) {
-        await sendDiscord(cfg.webhookUrl, message);
+        await sendDiscord(cfg.webhookUrl, finalMessage);
       } else if (ch.type === "webhook" && cfg.url) {
-        await sendWebhook(cfg.url, message, cfg.secret, cfg.headers);
+        await sendWebhook(cfg.url, finalMessage, cfg.secret, cfg.headers);
       } else {
         error = `Misconfigured channel type: ${ch.type}`;
         status = "failed";

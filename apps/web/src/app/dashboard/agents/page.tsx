@@ -44,7 +44,9 @@ export default function AgentsPage() {
       const data = await res.json();
       if (data.success && data.data.length > 0) {
         setProjects(data.data);
-        setSelectedProject(data.data[0].id);
+        const savedId = localStorage.getItem("ezmon_active_project");
+        const isValid = data.data.some((p: any) => p.id === savedId);
+        setSelectedProject(isValid && savedId ? savedId : data.data[0].id);
       } else {
         setLoading(false);
       }
@@ -73,7 +75,19 @@ export default function AgentsPage() {
   useEffect(() => {
     fetchAgents();
     const interval = setInterval(fetchAgents, 30000);
-    return () => clearInterval(interval);
+
+    const handleProjectChange = (e: any) => {
+      if (e.detail?.id) {
+        setSelectedProject(e.detail.id);
+        setLoading(true);
+      }
+    };
+    window.addEventListener("ezmon_project_changed", handleProjectChange as EventListener);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("ezmon_project_changed", handleProjectChange as EventListener);
+    };
   }, [fetchAgents]);
 
   async function handleDelete(e: React.MouseEvent, agentId: string, agentName: string) {
@@ -135,19 +149,6 @@ export default function AgentsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3 w-full md:w-auto">
-          {projects.length > 1 && (
-            <select
-              value={selectedProject ?? ""}
-              onChange={(e) => setSelectedProject(e.target.value)}
-              className="bg-card border border-border rounded-md py-2 px-3 text-sm text-foreground focus:outline-none focus:border-primary flex-1 md:flex-none"
-            >
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          )}
           <Button
             onClick={() => setShowInstall(true)}
             disabled={!selectedProject}

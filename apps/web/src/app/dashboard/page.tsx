@@ -29,7 +29,9 @@ export default function DashboardPage() {
         const data = await res.json();
         if (data.success && data.data.length > 0) {
           setProjects(data.data);
-          setSelectedProject(data.data[0].id);
+          const savedId = localStorage.getItem("ezmon_active_project");
+          const isValid = data.data.some((p: any) => p.id === savedId);
+          setSelectedProject(isValid && savedId ? savedId : data.data[0].id);
         }
       } catch {
         setError("Failed to load projects");
@@ -63,7 +65,19 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchOverview();
     const interval = setInterval(fetchOverview, 30000);
-    return () => clearInterval(interval);
+    
+    const handleProjectChange = (e: any) => {
+      if (e.detail?.id) {
+        setSelectedProject(e.detail.id);
+        setLoading(true);
+      }
+    };
+    window.addEventListener("ezmon_project_changed", handleProjectChange as EventListener);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("ezmon_project_changed", handleProjectChange as EventListener);
+    };
   }, [fetchOverview]);
 
   if (loading) {
@@ -126,22 +140,6 @@ export default function DashboardPage() {
           <h1 className="text-3xl font-display font-bold tracking-tight text-foreground">System Overview</h1>
         </div>
         <div className="flex items-center gap-4 w-full sm:w-auto">
-          {projects.length > 1 && (
-            <select
-              value={selectedProject ?? ""}
-              onChange={(e) => {
-                setSelectedProject(e.target.value);
-                setLoading(true);
-              }}
-              className="bg-card border border-border rounded-md py-2 px-3 text-sm text-foreground focus:outline-none focus:border-primary flex-1 sm:flex-none"
-            >
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          )}
           <Button className="gap-2 w-full sm:w-auto" onClick={() => setShowInstall(true)} disabled={!selectedProject}>
             <Plus size={18} />
             Install Agent

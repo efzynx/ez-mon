@@ -8,7 +8,7 @@
 
 import { useEffect, useState, useCallback, use } from "react";
 import { useRouter } from "next/navigation";
-import { Server, Activity, MemoryStick, HardDrive, Cpu, Terminal, ArrowLeft, RefreshCw, Clock, Trash2, Loader2, X, AlertTriangle, Copy, Check, Box, Tags, Plus } from "lucide-react";
+import { Server, Activity, MemoryStick, HardDrive, Cpu, Terminal, ArrowLeft, RefreshCw, Clock, Trash2, Loader2, X, AlertTriangle, Copy, Check, Box, Tags, Plus, Pencil } from "lucide-react";
 import Link from "next/link";
 import type { DashboardOverview, DashboardAgent } from "@ezmon/shared";
 
@@ -35,6 +35,10 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
   const [showTagsModal, setShowTagsModal] = useState(false);
   const [editingTags, setEditingTags] = useState("");
   const [savingTags, setSavingTags] = useState(false);
+  
+  const [showNameModal, setShowNameModal] = useState(false);
+  const [editingName, setEditingName] = useState("");
+  const [savingName, setSavingName] = useState(false);
 
   const fetchAgent = useCallback(async () => {
     try {
@@ -116,6 +120,29 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
     }
   }
 
+  async function handleSaveName() {
+    if (!agent || !editingName.trim()) return;
+    setSavingName(true);
+    try {
+      const res = await fetch(`/api/dashboard/agents`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId: id, name: editingName.trim() })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAgent({ ...agent, name: editingName.trim() });
+        setShowNameModal(false);
+      } else {
+        alert(data.error || "Failed to update agent name");
+      }
+    } catch {
+      alert("Network error");
+    } finally {
+      setSavingName(false);
+    }
+  }
+
   function copyCmd(cmd: string, key: string) {
     navigator.clipboard.writeText(cmd);
     setCopiedCmd(key);
@@ -168,7 +195,12 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
         
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <h1 className="text-3xl font-display font-bold tracking-tight text-foreground">{agent.name}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-3xl font-display font-bold tracking-tight text-foreground">{agent.name}</h1>
+              <Button variant="ghost" size="icon" onClick={() => { setEditingName(agent.name); setShowNameModal(true); }} className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                <Pencil size={16} />
+              </Button>
+            </div>
             <Badge variant={isOnline ? "default" : "destructive"} className={`uppercase text-[10px] tracking-wider font-bold ${isOnline ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border-emerald-500/20' : 'bg-destructive/10 text-destructive hover:bg-destructive/20 border-destructive/20'}`}>
               <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-destructive'}`}></span>
               {agent.derivedStatus}
@@ -504,6 +536,55 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
               ) : (
                 <><Trash2 size={14} /> Delete Agent</>
               )}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Edit Name Modal */}
+    {showNameModal && agent && (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div
+          className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+          onClick={() => !savingName && setShowNameModal(false)}
+        />
+        <div className="relative bg-card border border-border rounded-xl w-full max-w-sm shadow-2xl animate-fade-in overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-5 border-b border-border">
+            <h3 className="font-display font-bold text-foreground">Edit Agent Name</h3>
+            {!savingName && (
+              <button
+                onClick={() => setShowNameModal(false)}
+                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+          <div className="p-6">
+            <label className="block text-sm font-medium mb-2 text-foreground/90">Agent Name</label>
+            <input 
+              className="bg-muted/50 border border-border rounded-md py-2 px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-full"
+              value={editingName}
+              onChange={(e) => setEditingName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSaveName()}
+              autoFocus
+            />
+          </div>
+          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border bg-muted/20">
+            <button
+              onClick={() => setShowNameModal(false)}
+              disabled={savingName}
+              className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveName}
+              disabled={savingName || !editingName.trim()}
+              className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              {savingName ? <><Loader2 size={14} className="animate-spin" /> Saving...</> : "Save"}
             </button>
           </div>
         </div>

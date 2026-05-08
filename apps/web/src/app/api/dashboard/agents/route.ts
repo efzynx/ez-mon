@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { agents, projects, eq, and } from "@ezmon/db";
-import { updateAgentStatusPageSchema, updateAgentTagsSchema } from "@ezmon/shared";
+import { updateAgentStatusPageSchema, updateAgentTagsSchema, updateAgentNameSchema } from "@ezmon/shared";
 
 export async function DELETE(req: NextRequest) {
   try {
@@ -101,6 +101,26 @@ export async function PATCH(req: NextRequest) {
       if (agentRows.length === 0) return NextResponse.json({ success: false, error: "Agent not found" }, { status: 404 });
 
       await db().update(agents).set({ showOnStatusPage }).where(eq(agents.id, agentId));
+      return NextResponse.json({ success: true });
+    }
+
+    if ("name" in body) {
+      const result = updateAgentNameSchema.safeParse(body);
+      if (!result.success) {
+        return NextResponse.json({ success: false, error: "Invalid input", issues: result.error.issues }, { status: 400 });
+      }
+
+      const { agentId, name } = result.data;
+      const agentRows = await db()
+        .select({ id: agents.id })
+        .from(agents)
+        .innerJoin(projects, eq(agents.projectId, projects.id))
+        .where(and(eq(agents.id, agentId), eq(projects.userId, session.user.id)))
+        .limit(1);
+
+      if (agentRows.length === 0) return NextResponse.json({ success: false, error: "Agent not found" }, { status: 404 });
+
+      await db().update(agents).set({ name }).where(eq(agents.id, agentId));
       return NextResponse.json({ success: true });
     }
 

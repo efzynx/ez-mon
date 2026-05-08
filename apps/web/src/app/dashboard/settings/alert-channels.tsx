@@ -7,7 +7,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, type ComponentType } from "react";
-import { Bell, Plus, MessageSquare, Globe, Webhook, Trash2, ToggleLeft, ToggleRight, Loader2, X } from "lucide-react";
+import { Bell, Plus, MessageSquare, Globe, Webhook, Trash2, ToggleLeft, ToggleRight, Loader2, X, Info, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface Channel {
@@ -17,6 +17,7 @@ interface Channel {
   enabled: boolean;
   notifyOn: string; // offline | online | both
   createdAt: string;
+  configJson?: any;
 }
 
 type ChannelType = "telegram" | "discord" | "webhook";
@@ -43,7 +44,10 @@ export function AlertChannelsManagement() {
   const [formType, setFormType] = useState<ChannelType>("telegram");
   const [formName, setFormName] = useState("");
   const [formConfig, setFormConfig] = useState<Record<string, string>>({});
+  const [formCustomOffline, setFormCustomOffline] = useState("");
+  const [formCustomOnline, setFormCustomOnline] = useState("");
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [formNotifyOn, setFormNotifyOn] = useState<"offline" | "online" | "both">("both");
@@ -57,7 +61,9 @@ export function AlertChannelsManagement() {
         const data = await res.json();
         if (data.success && data.data.length > 0) {
           setProjects(data.data);
-          setSelectedProject(data.data[0].id);
+          const savedId = localStorage.getItem("ezmon_active_project");
+          const isValid = data.data.some((p: any) => p.id === savedId);
+          setSelectedProject(isValid && savedId ? savedId : data.data[0].id);
         } else {
           setLoading(false);
         }
@@ -88,41 +94,131 @@ export function AlertChannelsManagement() {
 
   useEffect(() => {
     fetchChannels();
+    
+    const handleProjectChange = (e: any) => {
+      if (e.detail?.id) {
+        setSelectedProject(e.detail.id);
+        setLoading(true);
+      }
+    };
+    window.addEventListener("ezmon_project_changed", handleProjectChange as EventListener);
+    return () => window.removeEventListener("ezmon_project_changed", handleProjectChange as EventListener);
   }, [fetchChannels]);
 
-  // Add new channel
-  async function handleAdd() {
+  async function handleSave() {
     if (!selectedProject || !formName) return;
     setSaving(true);
+
+    const config = {
+      ...formConfig,
+      customOfflineMessage: formCustomOffline || undefined,
+      customOnlineMessage: formCustomOnline || undefined,
+    };
+
     try {
-      const res = await fetch("/api/dashboard/notifications", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId: selectedProject,
-          type: formType,
-          name: formName,
-          config: formConfig,
-          enabled: true,
-          notifyOn: formNotifyOn,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setChannels((prev) => [...prev, data.data]);
-        setShowAdd(false);
-        setFormName("");
-        setFormConfig({});
-        setFormType("telegram");
-        setFormNotifyOn("both");
+      if (editingId) {
+        const res = await fetch("/api/dashboard/notifications", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            channelId: editingId,
+            name: formName,
+            config,
+            notifyOn: formNotifyOn,
+          }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          setChannels((prev) =>
+            prev.map((c) => (c.id === editingId ? { ...c, name: formName, configJson: config, notifyOn: formNotifyOn } : c))
+          );
+          closeModal();
+        } else {
+          setError(data.error ?? "Failed to update channel");
+        }
       } else {
-        setError(data.error ?? "Failed to add channel");
+        const res = await fetch("/api/dashboard/notifications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectId: selectedProject,
+            type: formType,
+            name: formName,
+            config,
+            enabled: true,
+            notifyOn: formNotifyOn,
+          }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          setChannels((prev) => [...prev, data.data]);
+          closeModal();
+        } else {
+          setError(data.error ?? "Failed to add channel");
+        }
       }
     } catch {
       setError("Network error");
     } finally {
       setSaving(false);
     }
+  }
+
+  const [testingType, setTestingType] = useState<"offline" | "online" | null>(null);
+
+  async function handleTest(eventType: "offline" | "online") {
+    setError("");
+    setTestingType(eventType);
+    const config = {
+      ...formConfig,
+      customOfflineMessage: formCustomOffline || undefined,
+      customOnlineMessage: formCustomOnline || undefined,
+    };
+    try {
+      const res = await fetch("/api/dashboard/notifications/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: formType, config, eventType }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setError(data.error ?? `Failed to send ${eventType} test notification`);
+      }
+    } catch {
+      setError("Network error during test");
+    } finally {
+      setTestingType(null);
+    }
+  }
+
+  function closeModal() {
+    setShowAdd(false);
+    setEditingId(null);
+    setFormName("");
+    setFormConfig({});
+    setFormCustomOffline("");
+    setFormCustomOnline("");
+    setFormType("telegram");
+    setFormNotifyOn("both");
+  }
+
+  function openEdit(ch: Channel) {
+    setEditingId(ch.id);
+    setFormType(ch.type as ChannelType);
+    setFormName(ch.name);
+    setFormNotifyOn(ch.notifyOn as any);
+    
+    const cfg = ch.configJson || {};
+    setFormConfig({
+      botToken: cfg.botToken || "",
+      chatId: cfg.chatId || "",
+      webhookUrl: cfg.webhookUrl || "",
+      url: cfg.url || "",
+      secret: cfg.secret || "",
+    });
+    setFormCustomOffline(cfg.customOfflineMessage || "");
+    setFormCustomOnline(cfg.customOnlineMessage || "");
+    setShowAdd(true);
   }
 
   // Toggle enabled/disabled
@@ -197,21 +293,10 @@ export function AlertChannelsManagement() {
         <div className="p-4 border-b border-border flex flex-col md:flex-row md:items-center justify-between gap-4 bg-muted/20">
           <div className="flex items-center gap-3">
             <h3 className="font-medium text-sm">Channels List</h3>
-            {projects.length > 1 && (
-              <select
-                value={selectedProject ?? ""}
-                onChange={(e) => setSelectedProject(e.target.value)}
-                className="bg-background border border-border rounded-md py-1 px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              >
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            )}
           </div>
           <Button
             size="sm"
-            onClick={() => setShowAdd(true)}
+            onClick={() => { closeModal(); setShowAdd(true); }}
             className="gap-2 h-8"
           >
             <Plus size={14} />
@@ -310,6 +395,15 @@ export function AlertChannelsManagement() {
 
                 {/* Actions */}
                 <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => openEdit(ch)}
+                    disabled={isDeleting || isToggling}
+                    className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                    title="Edit channel"
+                  >
+                    <Pencil size={16} />
+                  </button>
+
                   {/* Toggle */}
                   <button
                     onClick={() => handleToggle(ch)}
@@ -353,20 +447,22 @@ export function AlertChannelsManagement() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-background/80 backdrop-blur-sm"
-            onClick={() => setShowAdd(false)}
+            onClick={closeModal}
           />
-          <div className="relative bg-card border border-border p-6 rounded-xl w-full max-w-md animate-fade-in shadow-2xl">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-display font-bold text-foreground">Add Channel</h3>
+          <div className="relative flex flex-col bg-card border border-border rounded-xl w-full max-w-md max-h-[90vh] animate-fade-in shadow-2xl">
+            <div className="flex items-center justify-between p-6 pb-4 border-b border-border shrink-0">
+              <h3 className="text-xl font-display font-bold text-foreground">
+                {editingId ? "Edit Channel" : "Add Channel"}
+              </h3>
               <button
-                onClick={() => setShowAdd(false)}
+                onClick={closeModal}
                 className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="p-6 overflow-y-auto space-y-4">
               {/* Notify On */}
               <div>
                 <label className="block text-sm font-medium mb-1.5 text-foreground">Notify when</label>
@@ -394,18 +490,20 @@ export function AlertChannelsManagement() {
               </div>
 
               {/* Type */}
-              <div>
-                <label className="block text-sm font-medium mb-1.5 text-foreground">Type</label>
-                <select
-                  value={formType}
-                  onChange={(e) => { setFormType(e.target.value as ChannelType); setFormConfig({}); }}
-                  className="bg-background border border-border rounded-md py-2.5 px-4 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-full"
-                >
-                  <option value="telegram">Telegram</option>
-                  <option value="discord">Discord Webhook</option>
-                  <option value="webhook">Generic Webhook</option>
-                </select>
-              </div>
+              {!editingId && (
+                <div>
+                  <label className="block text-sm font-medium mb-1.5 text-foreground">Type</label>
+                  <select
+                    value={formType}
+                    onChange={(e) => { setFormType(e.target.value as ChannelType); setFormConfig({}); }}
+                    className="bg-background border border-border rounded-md py-2.5 px-4 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-full"
+                  >
+                    <option value="telegram">Telegram</option>
+                    <option value="discord">Discord Webhook</option>
+                    <option value="webhook">Generic Webhook</option>
+                  </select>
+                </div>
+              )}
 
               {/* Name */}
               <div>
@@ -480,23 +578,83 @@ export function AlertChannelsManagement() {
                   </div>
                 </>
               )}
+
+              {/* Custom Messages */}
+              <div className="pt-4 border-t border-border mt-6">
+                <div className="flex items-center gap-2 mb-4 text-muted-foreground">
+                  <Info size={16} />
+                  <span className="text-sm font-medium">Custom Message Templates (Optional)</span>
+                </div>
+                <div className="bg-muted/30 border border-border rounded-md p-3 mb-4 text-xs text-muted-foreground space-y-1">
+                  <p>Use variables to customize your message:</p>
+                  <ul className="list-disc pl-4 space-y-0.5">
+                    <li><code className="bg-muted px-1 rounded">{'{project}'}</code> : Project name</li>
+                    <li><code className="bg-muted px-1 rounded">{'{agent}'}</code> / <code className="bg-muted px-1 rounded">{'{monitor}'}</code> : Name of the agent or cloud monitor</li>
+                    <li><code className="bg-muted px-1 rounded">{'{status}'}</code> : e.g., DOWN, OFFLINE, RECOVERED, ONLINE</li>
+                    <li><code className="bg-muted px-1 rounded">{'{time}'}</code> : Event timestamp</li>
+                  </ul>
+                  <p className="pt-1 text-muted-foreground/80">Example: <code className="bg-muted px-1 rounded">{"{project} ({agent}) is {status} at {time}"}</code></p>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5 text-foreground">Offline/Down Message</label>
+                    <textarea
+                      className="bg-background border border-border rounded-md py-2 px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-full placeholder:text-muted-foreground resize-y min-h-[60px]"
+                      placeholder="e.g. 🔴 Agent {agent} is {status}!"
+                      value={formCustomOffline}
+                      onChange={(e) => setFormCustomOffline(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5 text-foreground">Online/Recovered Message</label>
+                    <textarea
+                      className="bg-background border border-border rounded-md py-2 px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-full placeholder:text-muted-foreground resize-y min-h-[60px]"
+                      placeholder="e.g. 🟢 Agent {agent} has {status}!"
+                      value={formCustomOnline}
+                      onChange={(e) => setFormCustomOnline(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                onClick={() => setShowAdd(false)}
-                className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAdd}
-                disabled={saving || !formName}
-                className="bg-primary hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-primary-foreground px-6 py-2 rounded-md font-medium transition-all text-sm flex items-center gap-2"
-              >
-                {saving && <Loader2 size={14} className="animate-spin" />}
-                {saving ? "Adding..." : "Add Channel"}
-              </button>
+            <div className="flex items-center justify-between p-6 pt-4 border-t border-border shrink-0 bg-muted/20">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleTest("offline")}
+                  disabled={testingType !== null}
+                  className="px-3 py-2 text-xs font-medium bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/20 rounded-md transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                  title="Send a dummy OFFLINE event to this channel"
+                >
+                  {testingType === "offline" && <Loader2 size={12} className="animate-spin" />}
+                  Test Offline
+                </button>
+                <button
+                  onClick={() => handleTest("online")}
+                  disabled={testingType !== null}
+                  className="px-3 py-2 text-xs font-medium bg-green-500/10 text-green-500 hover:bg-green-500/20 border border-green-500/20 rounded-md transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                  title="Send a dummy ONLINE recovery event to this channel"
+                >
+                  {testingType === "online" && <Loader2 size={12} className="animate-spin" />}
+                  Test Online
+                </button>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={closeModal}
+                  className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={saving || !formName}
+                  className="bg-primary hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-primary-foreground px-6 py-2 rounded-md font-medium transition-all text-sm flex items-center gap-2"
+                >
+                  {saving && <Loader2 size={14} className="animate-spin" />}
+                  {saving ? "Saving..." : (editingId ? "Save Changes" : "Add Channel")}
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -154,6 +154,12 @@ export async function POST(req: NextRequest) {
           incidentId: inc.id,
           message: msg,
           eventType: "online",
+          templateVars: {
+            project: "Unknown Project", // We'll try to fetch project name or leave it as fallback if we don't do a join
+            agentOrMonitor: agent.name,
+            status: "ONLINE",
+            time: new Date().toISOString(),
+          }
         }).catch((e) => console.error("[heartbeat] dispatch recovery failed:", e));
       }
     }

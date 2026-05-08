@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, FolderPlus, Tags, Loader2, X, Server, Bell } from "lucide-react";
+import { Plus, FolderPlus, Tags, Loader2, X, Server, Bell, Pencil, CheckCircle, Trash2 } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,9 @@ function TagsManagement({ projects, onUpdateProject }: { projects: any[], onUpda
 
   useEffect(() => {
     if (projects.length > 0 && !selectedProject) {
-      setSelectedProject(projects[0].id);
+      const savedId = localStorage.getItem("ezmon_active_project");
+      const isValid = projects.some(p => p.id === savedId);
+      setSelectedProject(isValid && savedId ? savedId : projects[0].id);
     }
   }, [projects, selectedProject]);
 
@@ -38,6 +40,12 @@ function TagsManagement({ projects, onUpdateProject }: { projects: any[], onUpda
         if (data.success) setAgents(data.data.agents);
       })
       .finally(() => setLoading(false));
+
+    const handleProjectChange = (e: any) => {
+      if (e.detail?.id) setSelectedProject(e.detail.id);
+    };
+    window.addEventListener("ezmon_project_changed", handleProjectChange as EventListener);
+    return () => window.removeEventListener("ezmon_project_changed", handleProjectChange as EventListener);
   }, [selectedProject]);
 
   const activeProject = projects.find(p => p.id === selectedProject);
@@ -164,17 +172,6 @@ function TagsManagement({ projects, onUpdateProject }: { projects: any[], onUpda
           <h2 className="text-lg font-display font-semibold text-foreground/90">Agent Tags Management</h2>
           <p className="text-sm text-muted-foreground mt-1">Create tags and assign them to multiple agents.</p>
         </div>
-        {projects.length > 1 && (
-          <select
-            value={selectedProject || ""}
-            onChange={(e) => setSelectedProject(e.target.value)}
-            className="bg-card border border-border rounded-md py-1.5 px-3 text-sm text-foreground focus:outline-none focus:border-primary"
-          >
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-        )}
       </div>
 
       <Card>
@@ -296,12 +293,33 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<"projects" | "agent-tags" | "alert-channels">("projects");
+  
+  const [showEditProjectModal, setShowEditProjectModal] = useState(false);
+  const [editingProject, setEditingProject] = useState<{id: string, name: string} | null>(null);
+  const [savingProjectName, setSavingProjectName] = useState(false);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/dashboard/projects").then((r) => r.json()).then((d) => {
       if (d.success) setProjects(d.data);
     }).finally(() => setLoading(false));
+
+    const savedId = localStorage.getItem("ezmon_active_project");
+    if (savedId) setActiveProjectId(savedId);
+
+    const handleProjectChange = (e: any) => {
+      if (e.detail?.id) setActiveProjectId(e.detail.id);
+    };
+    window.addEventListener("ezmon_project_changed", handleProjectChange as EventListener);
+    return () => window.removeEventListener("ezmon_project_changed", handleProjectChange as EventListener);
   }, []);
+
+  function handleSetActiveProject(id: string) {
+    setActiveProjectId(id);
+    localStorage.setItem("ezmon_active_project", id);
+    window.dispatchEvent(new CustomEvent("ezmon_project_changed", { detail: { id } }));
+  }
 
   async function handleCreate() {
     setError(""); setSaving(true);
@@ -316,6 +334,54 @@ export default function SettingsPage() {
         setShowCreate(false); setName(""); setSlug("");
       } else setError(data.error || "Failed");
     } finally { setSaving(false); }
+  }
+
+  async function handleSaveProjectName() {
+    if (!editingProject || !editingProject.name.trim()) return;
+    setSavingProjectName(true);
+    try {
+      const res = await fetch("/api/dashboard/projects", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: editingProject.id, name: editingProject.name.trim() })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setProjects(p => p.map(x => x.id === editingProject.id ? { ...x, name: editingProject.name.trim() } : x));
+        setShowEditProjectModal(false);
+      } else {
+        alert(data.error || "Failed to update project name");
+      }
+    } catch {
+      alert("Network error");
+    } finally {
+      setSavingProjectName(false);
+    }
+  }
+
+  async function handleDeleteProject(id: string) {
+    if (!confirm("Are you sure you want to delete this project? All agents, incidents, and monitors will be deleted forever. This cannot be undone.")) return;
+    setDeletingProjectId(id);
+    try {
+      const res = await fetch(`/api/dashboard/projects?projectId=${id}`, {
+        method: "DELETE"
+      });
+      const data = await res.json();
+      if (data.success) {
+        setProjects(p => p.filter(x => x.id !== id));
+        if (activeProjectId === id) {
+          const rem = projects.filter(x => x.id !== id);
+          if (rem.length > 0) handleSetActiveProject(rem[0].id);
+          else localStorage.removeItem("ezmon_active_project");
+        }
+      } else {
+        alert(data.error || "Failed to delete project");
+      }
+    } catch {
+      alert("Network error");
+    } finally {
+      setDeletingProjectId(null);
+    }
   }
 
   return (
@@ -406,17 +472,31 @@ export default function SettingsPage() {
                             <div>
                               <div className="font-semibold text-sm flex items-center gap-2">
                                 {p.name}
+                                <Button variant="ghost" size="icon" onClick={() => { setEditingProject({id: p.id, name: p.name}); setShowEditProjectModal(true); }} className="h-6 w-6 text-muted-foreground hover:text-foreground">
+                                  <Pencil size={12} />
+                                </Button>
                               </div>
                               <div className="text-xs text-muted-foreground font-mono mt-1 flex items-center gap-2">
                                 {p.slug} <span className="text-border">|</span> ID: {p.id.slice(0, 8)}...
+                                {activeProjectId === p.id && (
+                                  <Badge variant="outline" className="text-[9px] h-4 bg-emerald-500/10 text-emerald-500 border-emerald-500/20 px-1 ml-2">ACTIVE</Badge>
+                                )}
                               </div>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                             <div className="flex flex-col items-end gap-0.5">
+                            {activeProjectId !== p.id && (
+                              <Button variant="outline" size="sm" onClick={() => handleSetActiveProject(p.id)} className="h-8 text-xs">
+                                Set as Active
+                              </Button>
+                            )}
+                             <div className="flex flex-col items-end gap-0.5 ml-4">
                                 <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Created</span>
                                 <span className="text-xs font-mono text-foreground/80">{new Date(p.createdAt).toLocaleDateString()}</span>
                               </div>
+                              <Button variant="ghost" size="icon" onClick={() => handleDeleteProject(p.id)} disabled={deletingProjectId === p.id} className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 ml-2">
+                                {deletingProjectId === p.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                              </Button>
                           </div>
                         </div>
                       ))}
@@ -466,6 +546,52 @@ export default function SettingsPage() {
                 </Button>
               </div>
             </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Edit Project Name Modal */}
+      {showEditProjectModal && editingProject && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => !savingProjectName && setShowEditProjectModal(false)} />
+          <Card className="relative w-full max-w-sm animate-in fade-in zoom-in-95 duration-200 shadow-2xl border-border/50 overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-5 border-b border-border">
+              <h3 className="font-display font-bold text-foreground">Edit Project Name</h3>
+              {!savingProjectName && (
+                <button
+                  onClick={() => setShowEditProjectModal(false)}
+                  className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+            <div className="p-6">
+              <label className="block text-sm font-medium mb-2 text-foreground/90">Project Name</label>
+              <input 
+                className="bg-muted/50 border border-border rounded-md py-2 px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-full"
+                value={editingProject.name}
+                onChange={(e) => setEditingProject({ ...editingProject, name: e.target.value })}
+                onKeyDown={(e) => e.key === 'Enter' && handleSaveProjectName()}
+                autoFocus
+              />
+            </div>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border bg-muted/20">
+              <button
+                onClick={() => setShowEditProjectModal(false)}
+                disabled={savingProjectName}
+                className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveProjectName}
+                disabled={savingProjectName || !editingProject.name.trim()}
+                className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {savingProjectName ? <><Loader2 size={14} className="animate-spin" /> Saving...</> : "Save"}
+              </button>
+            </div>
           </Card>
         </div>
       )}

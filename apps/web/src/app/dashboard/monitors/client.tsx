@@ -32,23 +32,6 @@ export function MonitorsPageClient() {
 
   return (
     <div className="w-full">
-      {/* Page Header */}
-      <div className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="p-2 bg-primary/10 rounded-lg border border-primary/20">
-            <MonitorCheck size={20} className="text-primary" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-display font-bold text-foreground tracking-tight">
-              Cloud Monitors
-            </h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Monitor external URLs for uptime, TLS/SSL health, and keyword presence.
-            </p>
-          </div>
-        </div>
-      </div>
-
       {/* Content */}
       {loading ? (
         <div className="p-16 text-center text-muted-foreground text-sm">

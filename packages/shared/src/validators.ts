@@ -72,22 +72,29 @@ export const createProjectSchema = z.object({
 
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 
+export const updateProjectNameSchema = z.object({
+  projectId: z.string().uuid("Invalid project ID"),
+  name: z.string().min(1, "Name is required").max(50, "Project name too long"),
+});
+
+export type UpdateProjectNameInput = z.infer<typeof updateProjectNameSchema>;
+
 // ─── Notification Channel ─────────────────────────────────────────────────────
 
 export const telegramConfigSchema = z.object({
   botToken: z.string().min(1),
   chatId: z.string().min(1),
-});
+}).passthrough();
 
 export const discordConfigSchema = z.object({
   webhookUrl: z.string().url(),
-});
+}).passthrough();
 
 export const webhookConfigSchema = z.object({
   url: z.string().url(),
   secret: z.string().optional(),
   headers: z.record(z.string()).optional(),
-});
+}).passthrough();
 
 export const createNotificationChannelSchema = z.object({
   type: z.enum(["telegram", "discord", "webhook"]),
@@ -130,6 +137,13 @@ export const updateAgentTagsSchema = z.object({
 });
 
 export type UpdateAgentTagsInput = z.infer<typeof updateAgentTagsSchema>;
+
+export const updateAgentNameSchema = z.object({
+  agentId: z.string().uuid("Invalid agent ID"),
+  name: z.string().min(1, "Name is required").max(100),
+});
+
+export type UpdateAgentNameInput = z.infer<typeof updateAgentNameSchema>;
 
 export const saveStatusPageSchema = z.object({
   projectId: z.string().uuid("Invalid project ID"),

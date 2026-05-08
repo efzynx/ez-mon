@@ -18,7 +18,7 @@ import {
   HelpCircle,
   MonitorCheck,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -107,6 +107,49 @@ function SidebarNav({ isMobile = false, closeMenu = () => {} }) {
   );
 }
 
+function GlobalProjectSwitcher() {
+  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
+  const [selectedProject, setSelectedProject] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/dashboard/projects").then(res => res.json()).then(data => {
+      if (data.success && data.data.length > 0) {
+        setProjects(data.data);
+        const savedId = localStorage.getItem("ezmon_active_project");
+        const isValid = data.data.some((p: any) => p.id === savedId);
+        setSelectedProject(isValid && savedId ? savedId : data.data[0].id);
+      }
+    });
+
+    const handleProjectChange = (e: any) => {
+      if (e.detail?.id) setSelectedProject(e.detail.id);
+    };
+    window.addEventListener("ezmon_project_changed", handleProjectChange as EventListener);
+    return () => window.removeEventListener("ezmon_project_changed", handleProjectChange as EventListener);
+  }, []);
+
+  if (projects.length <= 1) return <Badge variant="outline" className="hidden sm:inline-flex font-mono text-[10px] bg-muted/30">PROD</Badge>;
+
+  return (
+    <select
+      value={selectedProject ?? ""}
+      onChange={(e) => {
+        const id = e.target.value;
+        setSelectedProject(id);
+        localStorage.setItem("ezmon_active_project", id);
+        window.dispatchEvent(new CustomEvent("ezmon_project_changed", { detail: { id } }));
+      }}
+      className="bg-muted/50 border border-border/50 rounded-md py-1 px-2 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary max-w-[150px] truncate transition-colors hover:bg-muted"
+    >
+      {projects.map((p) => (
+        <option key={p.id} value={p.id}>
+          {p.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function TopAppBar() {
   const { data: session } = useSession();
 
@@ -140,7 +183,7 @@ function TopAppBar() {
           />
         </div>
         <div className="flex items-center gap-2 md:border-l md:border-border/50 md:pl-4">
-          <Badge variant="outline" className="hidden sm:inline-flex font-mono text-[10px] bg-muted/30">PROD</Badge>
+          <GlobalProjectSwitcher />
           <Button variant="ghost" size="icon" className="relative rounded-full text-muted-foreground hover:text-foreground transition-colors">
             <Bell className="h-4 w-4" />
             <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-primary rounded-full shadow-[0_0_8px_rgba(var(--primary),0.8)]"></span>

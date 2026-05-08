@@ -5,6 +5,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.3-beta.1] - 2026-05-08
+
+### Fixed
+- Custom `customOnlineMessage` template not applying on agent recovery. Root cause: `lib/notify.ts` (called by Next.js heartbeat API on recovery) was missing template parsing logic, unlike the Cloudflare Worker which had it correctly. Online notifications always fell back to the hardcoded default message.
+- Zod config schemas (`telegramConfigSchema`, `discordConfigSchema`, `webhookConfigSchema`) were stripping unknown fields, causing `customOfflineMessage` and `customOnlineMessage` to be silently discarded during `POST /api/dashboard/notifications`. Fixed by adding `.passthrough()` to all three schemas.
+
+### Added
+- **Notification Test Buttons**: Added "Test Offline" and "Test Online" buttons to the Add/Edit Channel modal. Sends a dummy notification with the currently typed template (including placeholder resolution) without needing to cycle the real agent state.
+- **Test API Endpoint**: Created `POST /api/dashboard/notifications/test` to handle dummy notification dispatch for template preview.
+- `dispatchNotification()` in `lib/notify.ts` now accepts optional `templateVars` and resolves `{project}`, `{agent}`, `{monitor}`, `{status}`, `{time}` placeholders — matching the Cloudflare Worker behavior.
+
+### Changed
+- Test endpoint uses distinct dummy values: `{agent}` → `test-agent-1`, `{monitor}` → `test-monitor-1` so both placeholder types can be verified independently in a single test.
+- Heartbeat recovery handler now passes `templateVars` when dispatching online recovery notifications.
+
+---
+
 ## [0.1.2] - 2026-05-07
 
 ### Added

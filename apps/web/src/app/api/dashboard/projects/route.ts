@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { projects, eq, and } from "@ezmon/db";
-import { createProjectSchema } from "@ezmon/shared";
+import { createProjectSchema, updateProjectNameSchema } from "@ezmon/shared";
 
 export async function GET() {
   try {
@@ -111,9 +111,53 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
+    if (body.name) {
+      const parsed = updateProjectNameSchema.safeParse(body);
+      if (!parsed.success) {
+        return NextResponse.json({ success: false, error: parsed.error.errors[0]?.message ?? "Invalid input" }, { status: 400 });
+      }
+
+      await db()
+        .update(projects)
+        .set({ name: parsed.data.name })
+        .where(and(eq(projects.id, body.projectId), eq(projects.userId, session.user.id)));
+      return NextResponse.json({ success: true });
+    }
+
     return NextResponse.json({ success: false, error: "Invalid payload" }, { status: 400 });
   } catch (error) {
     console.error("[dashboard/projects] PATCH Error:", error);
+    return NextResponse.json(
+      { success: false, error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const { searchParams } = new URL(req.url);
+    const projectId = searchParams.get("projectId");
+
+    if (!projectId) {
+      return NextResponse.json({ success: false, error: "Project ID required" }, { status: 400 });
+    }
+
+    await db()
+      .delete(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.userId, session.user.id)));
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("[dashboard/projects] DELETE Error:", error);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 }

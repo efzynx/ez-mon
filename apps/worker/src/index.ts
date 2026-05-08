@@ -25,6 +25,7 @@ interface AgentRow {
   name: string;
   status: string;
   offline_deadline_at: string;
+  project_name?: string;
 }
 
 interface NotificationChannel {
@@ -38,6 +39,8 @@ interface NotificationChannel {
     url?: string;
     secret?: string;
     headers?: Record<string, string>;
+    customOfflineMessage?: string;
+    customOnlineMessage?: string;
   };
   enabled: boolean;
   notify_on: string;  // offline | online | both
@@ -55,6 +58,7 @@ interface MonitorRow {
   keyword: string | null;
   expected_status: number | null;
   last_status: string;    // up | down | unknown — untuk deteksi transisi
+  project_name?: string;
 }
 
 // ─── Neon HTTP Query Helper ───────────────────────────────────────────────────
@@ -150,7 +154,13 @@ async function dispatchNotifications(
   projectId: string,
   incidentId: string,
   message: string,
-  eventType: "offline" | "online"   // untuk filter notify_on
+  eventType: "offline" | "online",
+  templateVars?: {
+    project: string;
+    agentOrMonitor: string;
+    status: string;
+    time: string;
+  }
 ): Promise<void> {
   // Ambil semua channel yang aktif untuk project ini
   const channelsResult = await queryNeon(
@@ -178,13 +188,26 @@ async function dispatchNotifications(
     let sendErr: string | null = null;
     const cfg = ch.config_json;
 
+    let finalMessage = message;
+    if (templateVars) {
+      const template = eventType === "offline" ? cfg.customOfflineMessage : cfg.customOnlineMessage;
+      if (template) {
+        finalMessage = template
+          .replace(/{project}/g, templateVars.project)
+          .replace(/{agent}/g, templateVars.agentOrMonitor)
+          .replace(/{monitor}/g, templateVars.agentOrMonitor)
+          .replace(/{status}/g, templateVars.status)
+          .replace(/{time}/g, templateVars.time);
+      }
+    }
+
     try {
       if (ch.type === "telegram" && cfg.botToken && cfg.chatId) {
-        await sendTelegram(cfg.botToken, cfg.chatId, message);
+        await sendTelegram(cfg.botToken, cfg.chatId, finalMessage);
       } else if (ch.type === "discord" && cfg.webhookUrl) {
-        await sendDiscord(cfg.webhookUrl, message);
+        await sendDiscord(cfg.webhookUrl, finalMessage);
       } else if (ch.type === "webhook" && cfg.url) {
-        await sendWebhook(cfg.url, message, cfg.secret, cfg.headers);
+        await sendWebhook(cfg.url, finalMessage, cfg.secret, cfg.headers);
       } else {
         sendErr = `Unknown or misconfigured channel type: ${ch.type}`;
       }
@@ -394,12 +417,13 @@ async function runCloudChecks(databaseUrl: string): Promise<void> {
   // Ambil monitor aktif yang sudah waktunya dicek — max 50 per run untuk safety
   const result = await queryNeon(
     databaseUrl,
-    `SELECT id, project_id, name, url, type, interval_sec, timeout_sec, keyword, expected_status, last_status
-     FROM cloud_monitors
-     WHERE status = 'active'
-       AND next_check_at IS NOT NULL
-       AND next_check_at <= NOW()
-     ORDER BY next_check_at ASC
+    `SELECT cm.id, cm.project_id, cm.name, cm.url, cm.type, cm.interval_sec, cm.timeout_sec, cm.keyword, cm.expected_status, cm.last_status, p.name as project_name
+     FROM cloud_monitors cm
+     JOIN projects p ON cm.project_id = p.id
+     WHERE cm.status = 'active'
+       AND cm.next_check_at IS NOT NULL
+       AND cm.next_check_at <= NOW()
+     ORDER BY cm.next_check_at ASC
      LIMIT 50`
   );
 
@@ -564,7 +588,13 @@ async function runCloudChecks(databaseUrl: string): Promise<void> {
           monitor.project_id,
           incidentId,
           message,
-          isDown ? "offline" : "online"
+          isDown ? "offline" : "online",
+          {
+            project: monitor.project_name || "Unknown Project",
+            agentOrMonitor: monitor.name,
+            status: isDown ? "DOWN" : "RECOVERED",
+            time: new Date().toISOString()
+          }
         );
         console.log(`[cloud] Dispatched ${label} notification for monitor "${monitor.name}"`);
       } catch (e) {
@@ -661,11 +691,12 @@ export default {
 
       const overdueResult = await queryNeon(
         env.DATABASE_URL,
-        `SELECT id, project_id, name, status, offline_deadline_at
+        `SELECT agents.id, agents.project_id, agents.name, agents.status, agents.offline_deadline_at, projects.name as project_name
          FROM agents
-         WHERE status != 'offline'
-           AND offline_deadline_at IS NOT NULL
-           AND offline_deadline_at < NOW()
+         JOIN projects ON agents.project_id = projects.id
+         WHERE agents.status != 'offline'
+           AND agents.offline_deadline_at IS NOT NULL
+           AND agents.offline_deadline_at < NOW()
          LIMIT 500`
       );
 
@@ -709,7 +740,12 @@ export default {
           // Dispatch notifikasi offline ke semua channel aktif
           if (incidentId) {
             const msg = `🔴 *EZMON Alert*\nAgent *${agent.name}* is OFFLINE\nMissed heartbeat deadline at ${agent.offline_deadline_at}`;
-            await dispatchNotifications(env.DATABASE_URL, agent.project_id, incidentId, msg, "offline");
+            await dispatchNotifications(env.DATABASE_URL, agent.project_id, incidentId, msg, "offline", {
+              project: agent.project_name || "Unknown Project",
+              agentOrMonitor: agent.name,
+              status: "OFFLINE",
+              time: agent.offline_deadline_at || new Date().toISOString()
+            });
           }
         } else {
           console.log(`[evaluator] Agent ${agent.id} (${agent.name}) → already has open incident, skipping notify`);
@@ -720,11 +756,12 @@ export default {
 
       const recoveredResult = await queryNeon(
         env.DATABASE_URL,
-        `SELECT id, project_id, name, status
+        `SELECT agents.id, agents.project_id, agents.name, agents.status, projects.name as project_name
          FROM agents
-         WHERE status = 'offline'
-           AND offline_deadline_at IS NOT NULL
-           AND offline_deadline_at >= NOW()
+         JOIN projects ON agents.project_id = projects.id
+         WHERE agents.status = 'offline'
+           AND agents.offline_deadline_at IS NOT NULL
+           AND agents.offline_deadline_at >= NOW()
          LIMIT 500`
       );
 
@@ -755,7 +792,12 @@ export default {
           const incidentId = row.id as string;
           const projectId = row.project_id as string;
           const msg = `🟢 *EZMON Recovery*\nAgent *${agent.name}* is back ONLINE`;
-          await dispatchNotifications(env.DATABASE_URL, projectId, incidentId, msg, "online");
+          await dispatchNotifications(env.DATABASE_URL, projectId, incidentId, msg, "online", {
+            project: agent.project_name || "Unknown Project",
+            agentOrMonitor: agent.name,
+            status: "ONLINE",
+            time: new Date().toISOString()
+          });
         }
       }
 

@@ -43,7 +43,9 @@ export default function StatusPageSettings() {
         const json = await res.json();
         if (json.success && json.data.length > 0) {
           setProjects(json.data);
-          setProjectId(json.data[0].id);
+          const savedId = localStorage.getItem("ezmon_active_project");
+          const isValid = json.data.some((p: any) => p.id === savedId);
+          setProjectId(isValid && savedId ? savedId : json.data[0].id);
         } else {
           setLoading(false);
         }
@@ -52,6 +54,15 @@ export default function StatusPageSettings() {
       }
     }
     fetchProjects();
+
+    const handleProjectChange = (e: any) => {
+      if (e.detail?.id) {
+        setProjectId(e.detail.id);
+        setLoading(true);
+      }
+    };
+    window.addEventListener("ezmon_project_changed", handleProjectChange as EventListener);
+    return () => window.removeEventListener("ezmon_project_changed", handleProjectChange as EventListener);
   }, []);
 
   useEffect(() => {
@@ -168,19 +179,6 @@ export default function StatusPageSettings() {
           <p className="text-sm text-slate-400">Configure your public status page</p>
         </div>
         <div className="flex items-center gap-4">
-          {projects.length > 1 && (
-            <select
-              value={projectId ?? ""}
-              onChange={(e) => setProjectId(e.target.value)}
-              className="bg-slate-900 border border-slate-800 rounded-md py-2 px-3 text-sm text-slate-200 focus:outline-none focus:border-slate-500"
-            >
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          )}
           {projectSlug && published && (
             <Button variant="outline" className="border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300" onClick={() => window.open(`/status/${projectSlug}`, "_blank")}>
               View Public Page
