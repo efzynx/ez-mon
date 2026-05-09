@@ -257,10 +257,10 @@ export async function POST(req: NextRequest) {
   await db()
     .update(cloudMonitors)
     .set({
-      lastStatus: result.status,
+      // lastStatus: result.status, // Biarkan worker yang update agar isTransition terdeteksi
       lastCheckedAt: new Date(),
       lastLatencyMs: result.latencyMs,
-      nextCheckAt,
+      // nextCheckAt, // Jangan diubah agar worker cron tetap memproses
       ...(tlsExpiresAt ? { tlsExpiresAt } : {}),
       updatedAt: new Date(),
     })

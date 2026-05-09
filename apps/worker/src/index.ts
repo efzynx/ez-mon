@@ -41,6 +41,7 @@ interface NotificationChannel {
     headers?: Record<string, string>;
     customOfflineMessage?: string;
     customOnlineMessage?: string;
+    targetType?: "all" | "agent" | "monitor";
   };
   enabled: boolean;
   notify_on: string;  // offline | online | both
@@ -155,6 +156,7 @@ async function dispatchNotifications(
   incidentId: string,
   message: string,
   eventType: "offline" | "online",
+  sourceType: "agent" | "monitor",
   templateVars?: {
     project: string;
     agentOrMonitor: string;
@@ -174,10 +176,15 @@ async function dispatchNotifications(
   const channels = channelsResult.rows as unknown as NotificationChannel[];
   if (channels.length === 0) return;
 
-  // Filter berdasarkan notify_on
+  // Filter berdasarkan notify_on dan targetType
   const eligible = channels.filter(ch => {
     const n = ch.notify_on ?? "both";
-    return n === "both" || n === eventType;
+    const notifyMatch = n === "both" || n === eventType;
+    
+    const target = ch.config_json?.targetType ?? "all";
+    const targetMatch = target === "all" || target === sourceType;
+    
+    return notifyMatch && targetMatch;
   });
   if (eligible.length === 0) {
     console.log(`[notify] No channels eligible for eventType=${eventType}`);
@@ -504,7 +511,7 @@ async function runCloudChecks(databaseUrl: string): Promise<void> {
     // Hanya kirim jika: sebelumnya bukan 'unknown' DAN status berubah
     const prevStatus = monitor.last_status;
     const newStatus = checkResult.status;
-    const isTransition = prevStatus !== "unknown" && prevStatus !== newStatus;
+    const isTransition = (prevStatus !== "unknown" && prevStatus !== newStatus) || (prevStatus === "unknown" && newStatus === "down");
 
     if (isTransition) {
       const isDown = newStatus === "down";
@@ -589,6 +596,7 @@ async function runCloudChecks(databaseUrl: string): Promise<void> {
           incidentId,
           message,
           isDown ? "offline" : "online",
+          "monitor",
           {
             project: monitor.project_name || "Unknown Project",
             agentOrMonitor: monitor.name,
@@ -613,7 +621,7 @@ async function runCloudChecks(databaseUrl: string): Promise<void> {
 
 // ─── Worker Export ────────────────────────────────────────────────────────────
 
-export default {
+const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
@@ -654,6 +662,14 @@ export default {
         const evRes = await queryNeon(env.DATABASE_URL, `SELECT * FROM alert_events LIMIT 10`);
         report.recent_alert_events = evRes.rows;
 
+        // 7. Cloud monitors state
+        const monitorsRes = await queryNeon(env.DATABASE_URL,
+          `SELECT id, name, url, last_status, next_check_at, status,
+                  (next_check_at <= NOW()) as due_now,
+                  next_check_at - NOW() as time_until_check
+           FROM cloud_monitors ORDER BY next_check_at ASC LIMIT 20`);
+        report.cloud_monitors = monitorsRes.rows;
+
         report.db_ok = true;
       } catch (e) {
         report.db_error = String(e);
@@ -668,13 +684,31 @@ export default {
     // ── /trigger — manual evaluator run ──────────────────────────────────────
     if (url.pathname === "/trigger" && request.method === "POST") {
       ctx.waitUntil(
-        this.scheduled(
+        worker.scheduled(
           { cron: "manual", type: "manual", scheduledTime: Date.now() } as ScheduledEvent,
           env,
           ctx
         )
       );
       return new Response("Evaluator triggered manually", { status: 200 });
+    }
+
+    // ── /reset-monitors — paksa semua monitor agar diproses di /trigger berikutnya ─
+    if (url.pathname === "/reset-monitors" && request.method === "POST") {
+      try {
+        const res = await queryNeon(env.DATABASE_URL,
+          `UPDATE cloud_monitors
+           SET next_check_at = NOW(),
+               last_status = 'unknown'
+           WHERE status = 'active'
+           RETURNING id, name, last_status`);
+        return new Response(
+          JSON.stringify({ reset: res.rows.length, monitors: res.rows }, null, 2),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      } catch (e) {
+        return new Response(JSON.stringify({ error: String(e) }), { status: 500 });
+      }
     }
 
     return new Response(
@@ -740,7 +774,7 @@ export default {
           // Dispatch notifikasi offline ke semua channel aktif
           if (incidentId) {
             const msg = `🔴 *EZMON Alert*\nAgent *${agent.name}* is OFFLINE\nMissed heartbeat deadline at ${agent.offline_deadline_at}`;
-            await dispatchNotifications(env.DATABASE_URL, agent.project_id, incidentId, msg, "offline", {
+            await dispatchNotifications(env.DATABASE_URL, agent.project_id, incidentId, msg, "offline", "agent", {
               project: agent.project_name || "Unknown Project",
               agentOrMonitor: agent.name,
               status: "OFFLINE",
@@ -792,7 +826,7 @@ export default {
           const incidentId = row.id as string;
           const projectId = row.project_id as string;
           const msg = `🟢 *EZMON Recovery*\nAgent *${agent.name}* is back ONLINE`;
-          await dispatchNotifications(env.DATABASE_URL, projectId, incidentId, msg, "online", {
+          await dispatchNotifications(env.DATABASE_URL, projectId, incidentId, msg, "online", "agent", {
             project: agent.project_name || "Unknown Project",
             agentOrMonitor: agent.name,
             status: "ONLINE",
@@ -837,3 +871,5 @@ export default {
     }
   },
 };
+
+export default worker;

@@ -79,13 +79,14 @@ export interface DashboardOverview {
 
 export interface DashboardIncident {
   id: string;
-  agentId: string;
-  agentName: string;
+  agentId: string | null;
+  agentName: string | null;
   type: IncidentType;
   status: IncidentStatus;
   message: string | null;
   startedAt: string;
   resolvedAt: string | null;
+  metadata?: Record<string, any> | null;
 }
 
 export interface DashboardStatusPage {

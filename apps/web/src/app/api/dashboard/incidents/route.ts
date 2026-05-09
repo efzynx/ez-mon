@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
         agentName: agents.name,
       })
       .from(incidents)
-      .innerJoin(agents, eq(incidents.agentId, agents.id))
+      .leftJoin(agents, eq(incidents.agentId, agents.id))
       .where(and(...filters))
       .orderBy(desc(incidents.startedAt))
       .limit(limit)
@@ -86,6 +86,7 @@ export async function GET(req: NextRequest) {
       type: row.incident.type as DashboardIncident["type"],
       status: row.incident.status as DashboardIncident["status"],
       message: row.incident.message,
+      metadata: row.incident.metadata as Record<string, any> | null,
       startedAt: row.incident.startedAt.toISOString(),
       resolvedAt: row.incident.resolvedAt?.toISOString() ?? null,
     }));

@@ -5,7 +5,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.3-beta.3] - 2026-05-09
+
+### Added
+- **Notification Target Type**: Alert channels now support a `targetType` field (`all` | `agent` | `monitor`). Users can configure each channel to only receive alerts from Agents, Cloud Monitors, or both — eliminating duplicate cross-source notifications.
+- **Target Type UI**: Added a three-option selector ("🌐 All", "💻 Agents", "☁️ Monitors") to the Add/Edit Channel modal in Dashboard Settings → Alert Channels. The channel list card now displays the configured target alongside the channel type.
+- **Worker `/debug` Monitor Info**: The `/debug` endpoint now includes `cloud_monitors` section showing `last_status`, `next_check_at`, `due_now`, and `time_until_check` for all monitors — useful for local development diagnostics.
+- **Worker `/reset-monitors` Endpoint**: New `POST /reset-monitors` development endpoint that resets all active monitors' `next_check_at` to `NOW()` and `last_status` to `unknown`, forcing them to be evaluated on the next `/trigger` call.
+
+### Fixed
+- **Monitor notifications never firing**: Cloud monitor down/up transitions were silently skipped because the `last_status` column in the database was already `down` (set by previous runs or the "Check Now" UI button). The Cloudflare Worker's `isTransition` logic now also accepts `unknown → down` as a valid trigger, and the "Check Now" button no longer overwrites `lastStatus` or `nextCheckAt` in the database so the Worker remains the single source of truth for state transitions.
+- **Duplicate notifications for all channels**: The Cloudflare Worker's `dispatchNotifications` function previously broadcast to every enabled channel regardless of source type. It now filters channels by `config_json.targetType` matching the `sourceType` (`"agent"` or `"monitor"`) of the triggering event.
+- **Monitor incidents failing silently**: The `incidents` table had a `NOT NULL` constraint on `agent_id`, causing cloud monitor incidents to fail at the DB layer (no agent ID to reference). `agent_id` is now nullable and a `metadata` JSONB column has been added to store monitor context (`monitor_id`, `monitor_name`, `url`).
+- **`DashboardIncident` type mismatch**: The `incidents` GET route was using `innerJoin` to agents, which excluded monitor incidents (no `agent_id`). Changed to `leftJoin` and updated the `DashboardIncident` shared type to allow `agentId: string | null` and `agentName: string | null`.
+- **Status page type error**: The `/status/[slug]` page was passing a potentially `null` `agentId` to `Set.has()`, causing a TypeScript error. Fixed with a null guard.
+- **Worker `this.scheduled` binding error**: The `export default {}` pattern in the Cloudflare Worker caused silent failures when `/trigger` called `this.scheduled()` due to `this` context loss in ES Modules. Refactored to an explicit `const worker = { ... }` variable with `export default worker` so `worker.scheduled()` resolves correctly.
+- **`fetch failed` ETIMEDOUT on Telegram API from local dev**: Node.js v17+ performs dual-stack (IPv4 + IPv6) DNS resolution in parallel. If IPv6 times out, it throws `AggregateError: ETIMEDOUT`, preventing outbound notifications. Fixed by adding `NODE_OPTIONS=--dns-result-order=ipv4first` to `apps/web/.env.local`.
+
+### Changed
+- `Check Now` button in Cloud Monitors UI no longer updates `lastStatus` or `nextCheckAt` on the monitor record. It only records a new row in `cloud_check_results` for the history graph. This ensures the Cloudflare Worker remains the sole owner of state transition detection and notification dispatch.
+
+---
+
 ## [0.1.3-beta.2] - 2026-05-08
+
 
 ### Added
 - **Custom Status Page Slug**: Added `custom_slug` column to `status_pages` table and enabled users to configure custom URLs (e.g., `/status/my-server`) from the Dashboard Settings.

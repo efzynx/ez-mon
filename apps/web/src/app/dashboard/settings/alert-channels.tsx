@@ -51,6 +51,7 @@ export function AlertChannelsManagement() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [formNotifyOn, setFormNotifyOn] = useState<"offline" | "online" | "both">("both");
+  const [formTargetType, setFormTargetType] = useState<"all" | "agent" | "monitor">("all");
   const [updatingNotifyId, setUpdatingNotifyId] = useState<string | null>(null);
 
   // Load projects once
@@ -113,6 +114,7 @@ export function AlertChannelsManagement() {
       ...formConfig,
       customOfflineMessage: formCustomOffline || undefined,
       customOnlineMessage: formCustomOnline || undefined,
+      targetType: formTargetType,
     };
 
     try {
@@ -173,6 +175,7 @@ export function AlertChannelsManagement() {
       ...formConfig,
       customOfflineMessage: formCustomOffline || undefined,
       customOnlineMessage: formCustomOnline || undefined,
+      targetType: formTargetType,
     };
     try {
       const res = await fetch("/api/dashboard/notifications/test", {
@@ -200,6 +203,7 @@ export function AlertChannelsManagement() {
     setFormCustomOnline("");
     setFormType("telegram");
     setFormNotifyOn("both");
+    setFormTargetType("all");
   }
 
   function openEdit(ch: Channel) {
@@ -218,6 +222,7 @@ export function AlertChannelsManagement() {
     });
     setFormCustomOffline(cfg.customOfflineMessage || "");
     setFormCustomOnline(cfg.customOnlineMessage || "");
+    setFormTargetType(cfg.targetType || "all");
     setShowAdd(true);
   }
 
@@ -363,6 +368,8 @@ export function AlertChannelsManagement() {
                   <p className="font-semibold text-foreground truncate">{ch.name}</p>
                   <p className="text-xs text-muted-foreground font-mono mt-0.5">
                     {CHANNEL_LABELS[ch.type] ?? ch.type}
+                    <span className="mx-1.5 opacity-40">•</span>
+                    Target: {ch.configJson?.targetType === "agent" ? "Agents" : ch.configJson?.targetType === "monitor" ? "Monitors" : "All"}
                   </p>
                 </div>
 
@@ -486,6 +493,32 @@ export function AlertChannelsManagement() {
                   {formNotifyOn === "offline" && "Only notify when the agent goes offline."}
                   {formNotifyOn === "online" && "Only notify when the agent comes back online."}
                   {formNotifyOn === "both" && "Notify when the agent goes offline and when it recovers."}
+                </p>
+              </div>
+
+              {/* Target Type */}
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-foreground">Target</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["all", "agent", "monitor"] as const).map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => setFormTargetType(opt)}
+                      className={`py-2.5 px-3 rounded-md border text-sm font-medium transition-all ${
+                        formTargetType === opt
+                          ? "bg-primary/15 border-primary text-primary"
+                          : "bg-background border-border text-muted-foreground hover:border-primary/50"
+                      }`}
+                    >
+                      {opt === "all" ? "🌐 All" : opt === "agent" ? "💻 Agents" : "☁️ Monitors"}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  {formTargetType === "all" && "Receive notifications for both agents and cloud monitors."}
+                  {formTargetType === "agent" && "Only receive notifications for agents."}
+                  {formTargetType === "monitor" && "Only receive notifications for cloud monitors."}
                 </p>
               </div>
 

@@ -169,15 +169,18 @@ export const incidents = pgTable(
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
     agentId: uuid("agent_id")
-      .notNull()
       .references(() => agents.id, { onDelete: "cascade" }),
-    type: text("type").notNull(), // heartbeat_missed, recovered, threshold_cpu
+    type: text("type").notNull(), // heartbeat_missed, recovered, threshold_cpu, monitor_down
     status: text("status").notNull().default("open"),
     message: text("message"),
+    metadata: jsonb("metadata"),
     startedAt: timestamp("started_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (table) => [
     index("idx_incidents_project_id").on(table.projectId),

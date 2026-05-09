@@ -62,7 +62,7 @@ export default async function PublicStatusPage({ params }: { params: Promise<{ s
     .where(and(eq(incidents.projectId, projectData.id), eq(incidents.status, INCIDENT_STATUS.OPEN)));
 
   const agentIds = new Set(agentRows.map((a) => a.id));
-  const openIncidents = allOpenIncidents.filter((inc) => agentIds.has(inc.agentId));
+  const openIncidents = allOpenIncidents.filter((inc) => inc.agentId && agentIds.has(inc.agentId));
 
   // ── Derive statuses ───────────────────────────────────────────────────────────
   const agentStatuses = agentRows.map((a) => ({
