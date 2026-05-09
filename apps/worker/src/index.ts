@@ -180,12 +180,18 @@ async function dispatchNotifications(
   const eligible = channels.filter(ch => {
     const n = ch.notify_on ?? "both";
     const notifyMatch = n === "both" || n === eventType;
-    
-    const target = ch.config_json?.targetType ?? "all";
+
+    // Neon HTTP API mengembalikan JSONB sebagai string — parse dulu jika perlu
+    const cfgRaw = ch.config_json;
+    const cfg = typeof cfgRaw === "string" ? JSON.parse(cfgRaw) : (cfgRaw ?? {});
+    const target = cfg.targetType ?? "all";
     const targetMatch = target === "all" || target === sourceType;
-    
+
+    console.log(`[notify] Channel "${ch.name}" notify_on=${n} target=${target} sourceType=${sourceType} → notifyMatch=${notifyMatch} targetMatch=${targetMatch}`);
+
     return notifyMatch && targetMatch;
   });
+
   if (eligible.length === 0) {
     console.log(`[notify] No channels eligible for eventType=${eventType}`);
     return;
@@ -193,7 +199,7 @@ async function dispatchNotifications(
 
   for (const ch of eligible) {
     let sendErr: string | null = null;
-    const cfg = ch.config_json;
+    const cfg: any = typeof ch.config_json === "string" ? JSON.parse(ch.config_json) : (ch.config_json ?? {});
 
     let finalMessage = message;
     if (templateVars) {
