@@ -5,7 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.3] - 2026-05-09
+
+### Fixed
+- **Agent recovery double notification**: Agent `online` recovery events are dispatched from the Next.js heartbeat API via `lib/notify.ts`. This function was missing `targetType` filtering, causing monitor-only channels to receive agent recovery notifications. Added `sourceType` parameter (`"agent" | "monitor"`, defaults to `"agent"`) and `targetType` filter logic to `dispatchNotification()` — mirroring the Cloudflare Worker's behavior.
+- **`config_json` JSONB read as string**: The Cloudflare Worker uses a raw HTTP request to the Neon `/sql` endpoint. This endpoint returns `JSONB` columns as plain strings, not parsed JavaScript objects. As a result, `ch.config_json?.targetType` was always `undefined` (falling back to `"all"`), bypassing the agent/monitor filter entirely. Fixed by wrapping all `config_json` access with `JSON.parse()` guard in `dispatchNotifications()`.
+- **Worker beta deploy silently targeting production**: `pnpm --filter @ezmon/worker run deploy -- --env beta` caused pnpm to pass `"--"` as a literal string argument to wrangler instead of a separator, so `--env beta` was never received. Added explicit `deploy:beta` script (`wrangler deploy --env beta`) to `apps/worker/package.json` to avoid the quoting issue.
+
+---
+
 ## [0.1.3-beta.3] - 2026-05-09
+
 
 ### Added
 - **Notification Target Type**: Alert channels now support a `targetType` field (`all` | `agent` | `monitor`). Users can configure each channel to only receive alerts from Agents, Cloud Monitors, or both — eliminating duplicate cross-source notifications.
