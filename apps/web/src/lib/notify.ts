@@ -53,18 +53,21 @@ export async function sendWebhook(url: string, message: string, secret?: string,
 /**
  * Dispatch notifikasi ke semua channel aktif yang relevan untuk sebuah event.
  * Filter berdasarkan notify_on: 'offline' | 'online' | 'both'
+ * Filter berdasarkan targetType: 'all' | 'agent' | 'monitor'
  */
 export async function dispatchNotification({
   projectId,
   incidentId,
   message,
   eventType,
+  sourceType = "agent",
   templateVars,
 }: {
   projectId: string;
   incidentId: string;
   message: string;
   eventType: EventType;
+  sourceType?: "agent" | "monitor";
   templateVars?: {
     project: string;
     agentOrMonitor: string;
@@ -91,8 +94,17 @@ export async function dispatchNotification({
     }
 
     const cfg = (ch.configJson ?? {}) as any;
+
+    // Filter targetType — hanya kirim ke channel yang sesuai source-nya
+    const targetType = cfg.targetType ?? "all";
+    if (targetType !== "all" && targetType !== sourceType) {
+      console.log(`[notify] Skip channel ${ch.name} (targetType=${targetType}, sourceType=${sourceType})`);
+      continue;
+    }
+
     let status = "sent";
     let error: string | null = null;
+
     
     let finalMessage = message;
     if (templateVars) {
