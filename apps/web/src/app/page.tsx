@@ -11,13 +11,13 @@
 
 import Link from "next/link";
 import { Shield, Zap, ChevronRight, Terminal, Server, Globe, Activity } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, Variants } from "framer-motion";
 
 import { Button } from "@/components/ui/button";
 import { Navbar } from "@/components/navbar";
 
 export default function HomePage() {
-  const containerVariants = {
+  const containerVariants: Variants = {
     hidden: { opacity: 0 },
     show: {
       opacity: 1,
@@ -28,7 +28,7 @@ export default function HomePage() {
     },
   };
 
-  const itemVariants = {
+  const itemVariants: Variants = {
     hidden: { opacity: 0, y: 30 },
     show: { 
       opacity: 1, 
@@ -68,7 +68,7 @@ export default function HomePage() {
           >
             <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
             <span className="text-xs font-semibold tracking-wider uppercase text-primary group-hover:text-primary transition-colors">
-              Stable Version v0.1.3 Available
+              Stable Version v0.1.4 Available
             </span>
           </motion.div>
 

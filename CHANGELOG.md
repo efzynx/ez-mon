@@ -18,7 +18,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## v0.1.4-beta.1 — 2026-05-11
+## v0.1.4 — 2026-05-11
 
 ### Changed
 - **Landing Page Redesign** — Completely overhauled the public landing page with a modern, high-converting UI and professional English copywriting.
