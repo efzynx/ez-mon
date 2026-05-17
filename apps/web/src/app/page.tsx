@@ -30,8 +30,8 @@ export default function HomePage() {
 
   const itemVariants: Variants = {
     hidden: { opacity: 0, y: 30 },
-    show: { 
-      opacity: 1, 
+    show: {
+      opacity: 1,
       y: 0,
       transition: { type: "spring", stiffness: 100, damping: 20 }
     },
@@ -45,35 +45,35 @@ export default function HomePage() {
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[100vw] h-[100vw] rounded-full bg-primary/5 blur-[150px] animate-pulse" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[80vw] h-[80vw] rounded-full bg-primary/5 blur-[150px]" />
-        
+
         {/* Animated Grid */}
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik02MCAwaC0xdjYwaDFWMEpNMCA1OXYxaDYwdi0xSDBaIiBmaWxsPSIjMWUyOTNiIiBmaWxsLW9wYWNpdHk9IjAuNSIvPjwvZz48L3N2Zz4=')] opacity-[0.1]" />
-        
+
         {/* Gradient Overlay */}
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#020617]/80 to-[#020617]" />
       </div>
 
       <main className="relative z-10 w-full max-w-6xl px-6 pt-44 pb-32">
         {/* Hero Section */}
-        <motion.div 
+        <motion.div
           className="flex flex-col items-center text-center"
           variants={containerVariants}
           initial="hidden"
           animate="show"
         >
           {/* Version Badge */}
-          <motion.div 
+          <motion.div
             variants={itemVariants}
             className="group flex items-center gap-2 mb-10 px-4 py-1.5 rounded-full border border-primary/20 bg-primary/10 backdrop-blur-md hover:bg-primary/20 transition-all cursor-default"
           >
             <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
             <span className="text-xs font-semibold tracking-wider uppercase text-primary group-hover:text-primary transition-colors">
-              Stable Version v0.1.4 Available
+              Stable Version v0.1.5 Available
             </span>
           </motion.div>
 
           {/* Headline */}
-          <motion.h1 
+          <motion.h1
             variants={itemVariants}
             className="text-5xl md:text-7xl lg:text-8xl font-display font-extrabold tracking-tight mb-8 leading-[1.1]"
           >
@@ -85,16 +85,16 @@ export default function HomePage() {
           </motion.h1>
 
           {/* Sub-headline */}
-          <motion.p 
+          <motion.p
             variants={itemVariants}
             className="text-lg md:text-xl text-slate-400 mb-12 max-w-2xl leading-relaxed"
           >
-            The open-source, serverless monitoring platform for modern engineering teams. 
+            The open-source, serverless monitoring platform for modern engineering teams.
             Monitor anything, anywhere, without the operational overhead.
           </motion.p>
 
           {/* CTAs */}
-          <motion.div 
+          <motion.div
             variants={itemVariants}
             className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto mb-24"
           >
@@ -112,7 +112,7 @@ export default function HomePage() {
           </motion.div>
 
           {/* Visual Showcase (Code/Terminal) */}
-          <motion.div 
+          <motion.div
             variants={itemVariants}
             className="w-full max-w-4xl relative"
           >
@@ -162,7 +162,7 @@ export default function HomePage() {
         </motion.div>
 
         {/* Features Grid */}
-        <motion.div 
+        <motion.div
           className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-32 w-full"
           variants={containerVariants}
           initial="hidden"
@@ -207,7 +207,7 @@ export default function HomePage() {
               gradient: "from-primary/10 to-transparent"
             }
           ].map((feature, i) => (
-            <motion.div 
+            <motion.div
               key={i}
               variants={itemVariants}
               whileHover={{ y: -5, borderColor: "rgba(34,197,94,0.3)" }}
@@ -225,7 +225,7 @@ export default function HomePage() {
         </motion.div>
 
         {/* Footer Text */}
-        <motion.div 
+        <motion.div
           variants={itemVariants}
           className="mt-32 pt-12 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6"
         >
@@ -246,15 +246,15 @@ export default function HomePage() {
 
 function Github({ size }: { size: number }) {
   return (
-    <svg 
-      xmlns="http://www.w3.org/2000/svg" 
-      width={size} 
-      height={size} 
-      viewBox="0 0 24 24" 
-      fill="none" 
-      stroke="currentColor" 
-      strokeWidth="2" 
-      strokeLinecap="round" 
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
       strokeLinejoin="round"
     >
       <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4" />
