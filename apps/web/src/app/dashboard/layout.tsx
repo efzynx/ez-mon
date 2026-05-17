@@ -1,3 +1,9 @@
+// Tujuan: Dashboard root layout — sidebar, top app bar, global nav & project switcher
+// Caller: Next.js App Router (wraps semua /dashboard/* pages)
+// Dependensi: next-auth (session), /api/dashboard/projects, NotificationCenter, GlobalSearch
+// Main Functions: SidebarNav, GlobalProjectSwitcher, TopAppBar, DashboardLayout
+// Side Effects: Fetch projects on mount, listens ezmon_project_changed / ezmon_projects_updated events
+
 "use client";
 
 import Link from "next/link";
@@ -9,19 +15,15 @@ import {
   LayoutDashboard,
   Server,
   AlertTriangle,
-  Bell,
   Globe,
   Settings,
   LogOut,
   Menu,
-  Search,
-  HelpCircle,
   MonitorCheck,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -33,6 +35,8 @@ import {
   DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
+import { NotificationCenter } from "@/components/header/NotificationCenter";
+import { GlobalSearch } from "@/components/header/GlobalSearch";
 import pkg from "../../../package.json";
 
 const navItems = [
@@ -186,21 +190,10 @@ function TopAppBar() {
       </div>
 
       <div className="flex items-center gap-4">
-        <div className="relative hidden sm:block w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            className="pl-9 h-9 rounded-full bg-muted/40 border-border/50 focus-visible:ring-1 focus-visible:border-primary transition-all shadow-none"
-            placeholder="Search..."
-            type="search"
-          />
-        </div>
+        <GlobalSearch className="hidden sm:block w-64" />
         <div className="flex items-center gap-2 md:border-l md:border-border/50 md:pl-4">
           <GlobalProjectSwitcher />
-          <Button variant="ghost" size="icon" className="relative rounded-full text-muted-foreground hover:text-foreground transition-colors">
-            <Bell className="h-4 w-4" />
-            <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-primary rounded-full shadow-[0_0_8px_rgba(var(--primary),0.8)]"></span>
-            <span className="sr-only">Notifications</span>
-          </Button>
+          <NotificationCenter />
           
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button variant="ghost" className="relative h-8 w-8 rounded-full ml-2" />}>
