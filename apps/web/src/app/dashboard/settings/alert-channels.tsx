@@ -627,7 +627,7 @@ export function AlertChannelsManagement() {
                   <div className="bg-indigo-500/8 border border-indigo-500/20 rounded-md p-3 mb-4 text-xs text-indigo-300 space-y-1.5">
                     <p className="font-semibold text-indigo-200">💡 Discord Rich Embed Support</p>
                     <p className="text-muted-foreground">
-                      Discord mendukung JSON embed yang kaya. Buat preview embed-mu terlebih dahulu di{" "}
+                      Discord supports rich JSON embeds. Build and preview your embed at{" "}
                       <a
                         href="https://discohook.org"
                         target="_blank"
@@ -636,9 +636,9 @@ export function AlertChannelsManagement() {
                       >
                         discohook.org
                       </a>
-                      , lalu paste JSON-nya di sini. Variabel EZMON akan di-replace secara otomatis di semua nilai string dalam JSON.
+                      , then paste the JSON here. EZMON variables will be automatically replaced in all string values within the JSON.
                     </p>
-                    <p className="text-muted-foreground/70 italic">Jika dikosongkan, EZMON akan mengirim embed default yang rapi secara otomatis.</p>
+                    <p className="text-muted-foreground/70 italic">If left empty, EZMON will send a clean default embed automatically.</p>
                   </div>
                 )}
 
