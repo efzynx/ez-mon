@@ -1,7 +1,7 @@
 // Tujuan: Global Search — command palette dropdown untuk mencari agents, nav pages, incidents
-// Caller: TopAppBar (apps/web/src/app/dashboard/layout.tsx)
+// Caller: TopAppBar (apps/web/src/app/dashboard/layout.tsx) — desktop inline + mobile overlay
 // Dependensi: /api/dashboard/overview (agents list), localStorage (ezmon_active_project)
-// Main Functions: GlobalSearch, GlobalSearchMobile
+// Main Functions: GlobalSearch
 // Side Effects: Fetch GET /api/dashboard/overview saat query berubah (debounced)
 
 "use client";
@@ -45,9 +45,10 @@ type ResultItem =
 
 interface GlobalSearchProps {
   className?: string;
+  autoFocus?: boolean;
 }
 
-export function GlobalSearch({ className = "" }: GlobalSearchProps) {
+export function GlobalSearch({ className = "", autoFocus = false }: GlobalSearchProps) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ResultItem[]>([]);
@@ -58,6 +59,14 @@ export function GlobalSearch({ className = "" }: GlobalSearchProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Auto-focus input saat autoFocus prop true (mobile overlay)
+  useEffect(() => {
+    if (autoFocus && inputRef.current) {
+      const timer = setTimeout(() => inputRef.current?.focus(), 50);
+      return () => clearTimeout(timer);
+    }
+  }, [autoFocus]);
 
   // Load agents once (from overview) — lightweight single fetch
   const loadAgents = useCallback(async () => {

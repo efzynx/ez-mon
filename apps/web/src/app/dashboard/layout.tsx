@@ -19,8 +19,11 @@ import {
   Settings,
   LogOut,
   Menu,
+  Search,
+  X,
   MonitorCheck,
 } from "lucide-react";
+import { Toaster } from "sonner";
 import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -168,8 +171,10 @@ function GlobalProjectSwitcher() {
 
 function TopAppBar() {
   const { data: session } = useSession();
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
   return (
+    <>
     <header className="flex justify-between items-center px-4 md:px-6 h-16 fixed top-0 w-full md:w-[calc(100%-16rem)] md:left-64 border-b border-border/50 z-30 bg-background/60 backdrop-blur-xl">
       <div className="flex items-center gap-4">
         <div className="md:hidden">
@@ -187,7 +192,17 @@ function TopAppBar() {
           <Image src="/logo-nobg.svg" alt="EZMON Logo" width={24} height={24} className="object-contain" />
           <span className="text-xl font-display font-bold tracking-tighter text-foreground">EZMON</span>
         </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="md:hidden shrink-0 text-muted-foreground"
+          onClick={() => setMobileSearchOpen(true)}
+          aria-label="Search"
+        >
+          <Search className="h-5 w-5" />
+        </Button>
       </div>
+
 
       <div className="flex items-center gap-4">
         <GlobalSearch className="hidden sm:block w-64" />
@@ -224,6 +239,30 @@ function TopAppBar() {
         </div>
       </div>
     </header>
+
+    {/* Mobile Search Overlay */}
+    {mobileSearchOpen && (
+      <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-xl flex flex-col p-4 md:hidden animate-in fade-in duration-150">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex-1">
+            <GlobalSearch className="w-full" autoFocus />
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-foreground shrink-0"
+            onClick={() => setMobileSearchOpen(false)}
+          >
+            <X className="h-4 w-4 mr-1" />
+            Cancel
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground/50 text-center mt-4">
+          Search agents, pages, and more...
+        </p>
+      </div>
+    )}
+    </>
   );
 }
 
@@ -234,6 +273,7 @@ export default function DashboardLayout({
 }) {
   return (
     <SessionProvider>
+      <Toaster richColors position="bottom-right" />
       <div className="min-h-screen bg-background text-foreground font-sans flex w-full">
         <aside className="fixed hidden md:flex h-full w-64 z-40 left-0 top-0">
           <SidebarNav />

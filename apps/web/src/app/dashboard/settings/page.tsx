@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "sonner";
+
 import { useEffect, useState } from "react";
 import { Plus, FolderPlus, Tags, Loader2, X, Server, Bell, Pencil, CheckCircle, Trash2 } from "lucide-react";
 
@@ -73,8 +75,9 @@ function TagsManagement({ projects, onUpdateProject }: { projects: any[], onUpda
         onUpdateProject(activeProject.id, { tags: newTags });
         setNewTagInput("");
         setIsAddingTag(false);
-      } else alert(data.error);
-    } catch { alert("Network error"); }
+        toast.success(`Tag "${tag}" created`);
+      } else toast.error(data.error || "Failed to create tag");
+    } catch { toast.error("Network error"); }
   }
 
   async function handleRemoveTag(tagToRemove: string) {
@@ -93,6 +96,7 @@ function TagsManagement({ projects, onUpdateProject }: { projects: any[], onUpda
       
       if (data.success) {
         onUpdateProject(activeProject.id, { tags: newTags });
+        toast.success(`Tag "${tagToRemove}" removed`);
         
         // Cascading delete for agents that have this tag
         if (affectedAgents.length > 0) {
@@ -113,7 +117,7 @@ function TagsManagement({ projects, onUpdateProject }: { projects: any[], onUpda
           }));
         }
       }
-    } catch { alert("Network error"); }
+    } catch { toast.error("Network error"); }
   }
 
   function openManageModal(tag: string) {
@@ -158,8 +162,9 @@ function TagsManagement({ projects, onUpdateProject }: { projects: any[], onUpda
       });
       setAgents(updatedAgents);
       setManagingTag(null);
+      toast.success("Assignments saved");
     } catch {
-      alert("Network error while saving assignments");
+      toast.error("Network error while saving assignments");
     } finally {
       setSavingAssignments(false);
     }
@@ -208,29 +213,32 @@ function TagsManagement({ projects, onUpdateProject }: { projects: any[], onUpda
               {projectTags.map((tag: string) => {
                 const assignedCount = agents.filter(a => a.tags?.includes(tag)).length;
                 return (
-                  <div key={tag} className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors">
-                    <div className="flex items-center gap-4">
-                      <div className="p-2 bg-primary/10 rounded-md"><Tags size={16} className="text-primary" /></div>
-                      <div>
-                        <div className="font-semibold text-sm flex items-center gap-2">
-                          {tag}
-                          <Badge variant="secondary" className="text-[10px] h-5">{assignedCount} agents</Badge>
+                  <div key={tag} className="flex items-center justify-between p-4 gap-3 hover:bg-muted/30 transition-colors">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="p-2 bg-primary/10 rounded-md shrink-0"><Tags size={16} className="text-primary" /></div>
+                      <div className="min-w-0">
+                        <div className="font-semibold text-sm flex items-center gap-2 flex-wrap">
+                          <span className="truncate">{tag}</span>
+                          <Badge variant="secondary" className="text-[10px] h-5 shrink-0">{assignedCount} agents</Badge>
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" className="gap-2 text-xs h-8" onClick={() => openManageModal(tag)}>
-                        <Server size={14} /> Assign Agents
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Button variant="outline" size="sm" className="gap-1.5 text-xs h-7 px-2.5" onClick={() => openManageModal(tag)}>
+                        <Server size={13} />
+                        <span className="hidden sm:inline">Assign</span>
+                        <span className="sm:hidden">Assign</span>
                       </Button>
-                      <button 
+                      <button
                         onClick={() => handleRemoveTag(tag)}
                         className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
                         title="Delete Tag"
                       >
-                        <X size={16} />
+                        <X size={15} />
                       </button>
                     </div>
                   </div>
+
                 );
               })}
             </div>
@@ -333,6 +341,7 @@ export default function SettingsPage() {
         setProjects((p) => [...p, data.data]);
         window.dispatchEvent(new CustomEvent("ezmon_projects_updated"));
         setShowCreate(false); setName(""); setSlug("");
+        toast.success("Project created");
       } else setError(data.error || "Failed");
     } finally { setSaving(false); }
   }
@@ -351,11 +360,12 @@ export default function SettingsPage() {
         setProjects(p => p.map(x => x.id === editingProject.id ? { ...x, name: editingProject.name.trim() } : x));
         window.dispatchEvent(new CustomEvent("ezmon_projects_updated"));
         setShowEditProjectModal(false);
+        toast.success("Project renamed");
       } else {
-        alert(data.error || "Failed to update project name");
+        toast.error(data.error || "Failed to update project name");
       }
     } catch {
-      alert("Network error");
+      toast.error("Network error");
     } finally {
       setSavingProjectName(false);
     }
@@ -372,16 +382,17 @@ export default function SettingsPage() {
       if (data.success) {
         setProjects(p => p.filter(x => x.id !== id));
         window.dispatchEvent(new CustomEvent("ezmon_projects_updated"));
+        toast.success("Project deleted");
         if (activeProjectId === id) {
           const rem = projects.filter(x => x.id !== id);
           if (rem.length > 0) handleSetActiveProject(rem[0].id);
           else localStorage.removeItem("ezmon_active_project");
         }
       } else {
-        alert(data.error || "Failed to delete project");
+        toast.error(data.error || "Failed to delete project");
       }
     } catch {
-      alert("Network error");
+      toast.error("Network error");
     } finally {
       setDeletingProjectId(null);
     }
@@ -469,37 +480,56 @@ export default function SettingsPage() {
                   ) : (
                     <div className="divide-y divide-border">
                       {projects.map((p) => (
-                        <div key={p.id} className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors">
-                          <div className="flex items-center gap-4">
-                            <div className="p-2 bg-primary/10 rounded-md"><FolderPlus size={16} className="text-primary" /></div>
-                            <div>
-                              <div className="font-semibold text-sm flex items-center gap-2">
-                                {p.name}
-                                <Button variant="ghost" size="icon" onClick={() => { setEditingProject({id: p.id, name: p.name}); setShowEditProjectModal(true); }} className="h-6 w-6 text-muted-foreground hover:text-foreground">
-                                  <Pencil size={12} />
-                                </Button>
-                              </div>
-                              <div className="text-xs text-muted-foreground font-mono mt-1 flex items-center gap-2">
-                                {p.slug} <span className="text-border">|</span> ID: {p.id.slice(0, 8)}...
-                                {activeProjectId === p.id && (
-                                  <Badge variant="outline" className="text-[9px] h-4 bg-emerald-500/10 text-emerald-500 border-emerald-500/20 px-1 ml-2">ACTIVE</Badge>
-                                )}
-                              </div>
+                        <div key={p.id} className="flex items-center gap-3 p-4 hover:bg-muted/30 transition-colors">
+                          {/* Icon */}
+                          <div className="p-2 bg-primary/10 rounded-md shrink-0">
+                            <FolderPlus size={16} className="text-primary" />
+                          </div>
+
+                          {/* Info — flex-1 agar compress jika perlu */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-semibold text-sm truncate">{p.name}</span>
+                              {activeProjectId === p.id && (
+                                <Badge variant="outline" className="text-[9px] h-4 bg-emerald-500/10 text-emerald-500 border-emerald-500/20 px-1 shrink-0">
+                                  ACTIVE
+                                </Badge>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => { setEditingProject({id: p.id, name: p.name}); setShowEditProjectModal(true); }}
+                                className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground"
+                              >
+                                <Pencil size={11} />
+                              </Button>
+                            </div>
+                            <div className="text-xs text-muted-foreground font-mono truncate mt-0.5">
+                              {p.slug} <span className="opacity-40">·</span> {p.id.slice(0, 8)}...
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
+
+                          {/* Actions — shrink-0 agar tidak menyusut */}
+                          <div className="flex items-center gap-1.5 shrink-0">
                             {activeProjectId !== p.id && (
-                              <Button variant="outline" size="sm" onClick={() => handleSetActiveProject(p.id)} className="h-8 text-xs">
-                                Set as Active
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleSetActiveProject(p.id)}
+                                className="h-7 text-xs px-2.5 whitespace-nowrap"
+                              >
+                                Set Active
                               </Button>
                             )}
-                             <div className="flex flex-col items-end gap-0.5 ml-4">
-                                <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Created</span>
-                                <span className="text-xs font-mono text-foreground/80">{new Date(p.createdAt).toLocaleDateString()}</span>
-                              </div>
-                              <Button variant="ghost" size="icon" onClick={() => handleDeleteProject(p.id)} disabled={deletingProjectId === p.id} className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 ml-2">
-                                {deletingProjectId === p.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                              </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteProject(p.id)}
+                              disabled={deletingProjectId === p.id}
+                              className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                            >
+                              {deletingProjectId === p.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                            </Button>
                           </div>
                         </div>
                       ))}

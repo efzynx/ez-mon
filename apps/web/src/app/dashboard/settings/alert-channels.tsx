@@ -6,6 +6,8 @@
 
 "use client";
 
+import { toast } from "sonner";
+
 import { useEffect, useState, useCallback, type ComponentType } from "react";
 import { Bell, Plus, MessageSquare, Globe, Webhook, Trash2, ToggleLeft, ToggleRight, Loader2, X, Info, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -135,6 +137,7 @@ export function AlertChannelsManagement() {
             prev.map((c) => (c.id === editingId ? { ...c, name: formName, configJson: config, notifyOn: formNotifyOn } : c))
           );
           closeModal();
+          toast.success("Channel updated");
         } else {
           setError(data.error ?? "Failed to update channel");
         }
@@ -155,6 +158,7 @@ export function AlertChannelsManagement() {
         if (data.success) {
           setChannels((prev) => [...prev, data.data]);
           closeModal();
+          toast.success("Channel added");
         } else {
           setError(data.error ?? "Failed to add channel");
         }
@@ -186,9 +190,13 @@ export function AlertChannelsManagement() {
       const data = await res.json();
       if (!data.success) {
         setError(data.error ?? `Failed to send ${eventType} test notification`);
+        toast.error(data.error ?? `Failed to send ${eventType} test`);
+      } else {
+        toast.success(`Test ${eventType} notification sent!`);
       }
     } catch {
       setError("Network error during test");
+      toast.error("Network error during test");
     } finally {
       setTestingType(null);
     }
@@ -240,9 +248,10 @@ export function AlertChannelsManagement() {
         setChannels((prev) =>
           prev.map((c) => (c.id === channel.id ? { ...c, enabled: !c.enabled } : c))
         );
+        toast.success(channel.enabled ? "Channel disabled" : "Channel enabled");
       }
     } catch {
-      // silent fail
+      toast.error("Failed to toggle channel");
     } finally {
       setTogglingId(null);
     }
@@ -279,9 +288,12 @@ export function AlertChannelsManagement() {
       const data = await res.json();
       if (data.success) {
         setChannels((prev) => prev.filter((c) => c.id !== channelId));
+        toast.success("Channel removed");
+      } else {
+        toast.error("Failed to remove channel");
       }
     } catch {
-      // silent fail
+      toast.error("Network error");
     } finally {
       setDeletingId(null);
     }
@@ -354,94 +366,94 @@ export function AlertChannelsManagement() {
             return (
               <div
                 key={ch.id}
-                className={`bg-card border rounded-lg p-5 flex items-center gap-4 transition-all ${
+                className={`bg-card border rounded-lg p-4 transition-all ${
                   ch.enabled ? "border-border hover:border-border/80" : "border-border/40 opacity-60"
                 }`}
               >
-                {/* Icon */}
-                <div className={`p-3 rounded-lg border transition-colors ${ch.enabled ? "bg-primary/10 border-primary/20" : "bg-muted border-border"}`}>
-                  <Icon size={20} className={ch.enabled ? "text-primary" : "text-muted-foreground"} />
-                </div>
+                {/* Top row: Icon + Info + Status */}
+                <div className="flex items-start gap-3">
+                  <div className={`p-2.5 rounded-lg border shrink-0 transition-colors ${ch.enabled ? "bg-primary/10 border-primary/20" : "bg-muted border-border"}`}>
+                    <Icon size={18} className={ch.enabled ? "text-primary" : "text-muted-foreground"} />
+                  </div>
 
-                {/* Info */}
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-foreground truncate">{ch.name}</p>
-                  <p className="text-xs text-muted-foreground font-mono mt-0.5">
-                    {CHANNEL_LABELS[ch.type] ?? ch.type}
-                    <span className="mx-1.5 opacity-40">•</span>
-                    Target: {ch.configJson?.targetType === "agent" ? "Agents" : ch.configJson?.targetType === "monitor" ? "Monitors" : "All"}
-                  </p>
-                </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-foreground truncate text-sm">{ch.name}</p>
+                    <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate">
+                      {CHANNEL_LABELS[ch.type] ?? ch.type}
+                      <span className="mx-1.5 opacity-40">•</span>
+                      {ch.configJson?.targetType === "agent" ? "Agents" : ch.configJson?.targetType === "monitor" ? "Monitors" : "All"}
+                    </p>
+                  </div>
 
-                {/* Notify On selector */}
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Notify</span>
-                  <select
-                    value={ch.notifyOn ?? "both"}
-                    disabled={updatingNotifyId === ch.id}
-                    onChange={(e) => handleNotifyOnChange(ch, e.target.value as "offline" | "online" | "both")}
-                    className="bg-muted border border-border rounded text-[11px] font-mono text-foreground py-1 px-2 focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50 cursor-pointer"
-                  >
-                    <option value="both">↕ Both</option>
-                    <option value="offline">🔴 Offline</option>
-                    <option value="online">🟢 Online</option>
-                  </select>
-                </div>
-
-                {/* Status badge */}
-                <span
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border shrink-0 ${
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border shrink-0 ${
                     ch.enabled
                       ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
                       : "bg-muted text-muted-foreground border-border"
-                  }`}
-                >
-                  {ch.enabled && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
-                  {ch.enabled ? "Active" : "Disabled"}
-                </span>
+                  }`}>
+                    {ch.enabled && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
+                    {ch.enabled ? "Active" : "Off"}
+                  </span>
+                </div>
 
-                {/* Actions */}
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    onClick={() => openEdit(ch)}
-                    disabled={isDeleting || isToggling}
-                    className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
-                    title="Edit channel"
-                  >
-                    <Pencil size={16} />
-                  </button>
+                {/* Bottom row: Notify selector + Actions */}
+                <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/30">
+                  {/* Notify On */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Notify</span>
+                    <select
+                      value={ch.notifyOn ?? "both"}
+                      disabled={updatingNotifyId === ch.id}
+                      onChange={(e) => handleNotifyOnChange(ch, e.target.value as "offline" | "online" | "both")}
+                      className="bg-muted border border-border rounded text-[11px] font-mono text-foreground py-1 px-1.5 focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50 cursor-pointer"
+                    >
+                      <option value="both">↕ Both</option>
+                      <option value="offline">🔴 Offline</option>
+                      <option value="online">🟢 Online</option>
+                    </select>
+                  </div>
 
-                  {/* Toggle */}
-                  <button
-                    onClick={() => handleToggle(ch)}
-                    disabled={isToggling || isDeleting}
-                    className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
-                    title={ch.enabled ? "Disable channel" : "Enable channel"}
-                  >
-                    {isToggling ? (
-                      <Loader2 size={16} className="animate-spin" />
-                    ) : ch.enabled ? (
-                      <ToggleRight size={18} className="text-emerald-500" />
-                    ) : (
-                      <ToggleLeft size={18} />
-                    )}
-                  </button>
+                  {/* Actions */}
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      onClick={() => openEdit(ch)}
+                      disabled={isDeleting || isToggling}
+                      className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                      title="Edit channel"
+                    >
+                      <Pencil size={15} />
+                    </button>
 
-                  {/* Delete */}
-                  <button
-                    onClick={() => handleDelete(ch.id)}
-                    disabled={isDeleting || isToggling}
-                    className="p-2 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
-                    title="Delete channel"
-                  >
-                    {isDeleting ? (
-                      <Loader2 size={16} className="animate-spin" />
-                    ) : (
-                      <Trash2 size={16} />
-                    )}
-                  </button>
+                    <button
+                      onClick={() => handleToggle(ch)}
+                      disabled={isToggling || isDeleting}
+                      className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                      title={ch.enabled ? "Disable channel" : "Enable channel"}
+                    >
+                      {isToggling ? (
+                        <Loader2 size={15} className="animate-spin" />
+                      ) : ch.enabled ? (
+                        <ToggleRight size={17} className="text-emerald-500" />
+                      ) : (
+                        <ToggleLeft size={17} />
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => handleDelete(ch.id)}
+                      disabled={isDeleting || isToggling}
+                      className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
+                      title="Delete channel"
+                    >
+                      {isDeleting ? (
+                        <Loader2 size={15} className="animate-spin" />
+                      ) : (
+                        <Trash2 size={15} />
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
+
             );
           })}
         </div>

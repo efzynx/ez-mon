@@ -1,12 +1,13 @@
 /**
  * Tujuan: Endpoint "Check Now" untuk Cloud Monitor — menjalankan HTTP/TLS/Keyword check secara inline
  * Caller: Dashboard UI (tombol "Check Now" di cloud-monitors.tsx)
- * Dependensi: db() singleton, auth(), cloudMonitors + cloudCheckResults tables
+ * Dependensi: db() singleton, auth(), cloudMonitors + cloudCheckResults tables, Node.js tls module
  * Main Functions: POST (jalankan check langsung untuk satu monitor)
  * Side Effects:
  *   - HTTP GET/HEAD ke URL target monitor (outbound)
+ *   - TLS socket connect ke hostname untuk baca cert expiry (Node.js tls module)
  *   - DB INSERT cloud_check_results
- *   - DB UPDATE cloud_monitors (lastStatus, lastCheckedAt, lastLatencyMs, nextCheckAt)
+ *   - DB UPDATE cloud_monitors (lastStatus, lastCheckedAt, lastLatencyMs, tlsExpiresAt)
  *
  * Catatan: Endpoint ini dimaksudkan untuk trigger manual/testing.
  *   Di production, Worker Cron yang menjalankan check secara periodik.
@@ -17,9 +18,14 @@
  *   - Verifikasi ownership via JOIN ke projects sebelum check
  */
 
+// Wajib Node.js runtime agar bisa pakai tls module (tidak kompatibel dengan Edge runtime)
+export const runtime = "nodejs";
+
+
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import * as tls from "tls";
 import {
   cloudMonitors,
   cloudCheckResults,
@@ -76,6 +82,38 @@ async function runHttpCheck(
   }
 }
 
+/**
+ * getTlsDaysRemaining: Koneksi TLS langsung via Node.js tls module
+ * untuk membaca expiry date sertifikat tanpa external API.
+ * Lebih reliable dibanding crt.sh yang bisa timeout atau blocked.
+ */
+function getTlsDaysRemaining(hostname: string, port = 443): Promise<number | null> {
+  return new Promise((resolve) => {
+    const socket = tls.connect(
+      { host: hostname, port, servername: hostname, rejectUnauthorized: false },
+      () => {
+        try {
+          const cert = socket.getPeerCertificate();
+          socket.destroy();
+          if (!cert || !cert.valid_to) {
+            resolve(null);
+            return;
+          }
+          const expiryMs = new Date(cert.valid_to).getTime();
+          const daysLeft = Math.floor((expiryMs - Date.now()) / 86400000);
+          resolve(daysLeft >= 0 ? daysLeft : 0);
+        } catch {
+          socket.destroy();
+          resolve(null);
+        }
+      }
+    );
+    socket.on("error", () => resolve(null));
+    // Safety timeout 8 detik
+    setTimeout(() => { socket.destroy(); resolve(null); }, 8000);
+  });
+}
+
 async function runTlsCheck(
   url: string,
   timeoutSec: number
@@ -92,39 +130,20 @@ async function runTlsCheck(
     };
   }
   try {
-    const resp = await fetch(url, {
-      method: "HEAD",
-      redirect: "follow",
-      signal: AbortSignal.timeout(timeoutSec * 1000),
-    });
+    const hostname = new URL(url).hostname;
+    const port = new URL(url).port ? parseInt(new URL(url).port) : 443;
+
+    // Jalankan HTTP check + TLS cert read secara paralel
+    const [resp, tlsDaysRemaining] = await Promise.all([
+      fetch(url, {
+        method: "HEAD",
+        redirect: "follow",
+        signal: AbortSignal.timeout(timeoutSec * 1000),
+      }),
+      getTlsDaysRemaining(hostname, port),
+    ]);
+
     const latencyMs = Date.now() - startMs;
-
-    // Lookup TLS expiry via crt.sh
-    let tlsDaysRemaining: number | null = null;
-    try {
-      const hostname = new URL(url).hostname;
-      const crtResp = await fetch(
-        `https://crt.sh/?q=${hostname}&output=json`,
-        { signal: AbortSignal.timeout(5000) }
-      );
-      if (crtResp.ok) {
-        const certs = (await crtResp.json()) as Array<{ not_after: string }>;
-        if (certs.length > 0) {
-          const sorted = certs
-            .map((c) => ({
-              daysLeft: Math.floor(
-                (new Date(c.not_after).getTime() - Date.now()) / 86400000
-              ),
-            }))
-            .filter((c) => c.daysLeft >= 0)
-            .sort((a, b) => b.daysLeft - a.daysLeft);
-          tlsDaysRemaining = sorted[0]?.daysLeft ?? null;
-        }
-      }
-    } catch {
-      // crt.sh unreachable — tidak blocking
-    }
-
     const isUp = resp.status >= 200 && resp.status < 400;
     return {
       status: isUp ? "up" : "down",
@@ -257,10 +276,9 @@ export async function POST(req: NextRequest) {
   await db()
     .update(cloudMonitors)
     .set({
-      // lastStatus: result.status, // Biarkan worker yang update agar isTransition terdeteksi
+      lastStatus: result.status,    // Update status dari Check Now juga
       lastCheckedAt: new Date(),
       lastLatencyMs: result.latencyMs,
-      // nextCheckAt, // Jangan diubah agar worker cron tetap memproses
       ...(tlsExpiresAt ? { tlsExpiresAt } : {}),
       updatedAt: new Date(),
     })

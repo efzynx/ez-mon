@@ -37,6 +37,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { MonitorHistoryChart } from "@/app/dashboard/monitors/history-chart";
+import { MonitorDetailPanel } from "@/components/monitors/MonitorDetailPanel";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -375,6 +376,7 @@ export function CloudMonitorsManagement({ projects }: { projects: Project[] }) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [checkingId, setCheckingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedMonitor, setSelectedMonitor] = useState<CloudMonitor | null>(null);
 
   useEffect(() => {
     if (!selectedProject) return;
@@ -399,6 +401,8 @@ export function CloudMonitorsManagement({ projects }: { projects: Project[] }) {
         setMonitors(prev =>
           prev.map(m => m.id === monitor.id ? { ...m, status: newStatus } : m)
         );
+        // Sync ke panel jika terbuka
+        setSelectedMonitor(prev => prev?.id === monitor.id ? { ...prev, status: newStatus } : prev);
       }
     } catch { /* silent */ } finally {
       setTogglingId(null);
@@ -413,6 +417,8 @@ export function CloudMonitorsManagement({ projects }: { projects: Project[] }) {
       const data = await res.json();
       if (data.success) {
         setMonitors(prev => prev.filter(m => m.id !== id));
+        // Tutup panel jika monitor yang dihapus sedang ditampilkan
+        setSelectedMonitor(prev => prev?.id === id ? null : prev);
       }
     } catch { /* silent */ } finally {
       setDeletingId(null);
@@ -430,21 +436,19 @@ export function CloudMonitorsManagement({ projects }: { projects: Project[] }) {
       const data = await res.json();
       if (data.success) {
         // Update local state dengan hasil check terbaru
+        const updated: Partial<CloudMonitor> = {
+          lastStatus: data.data.status,
+          lastLatencyMs: data.data.latencyMs,
+          lastCheckedAt: new Date().toISOString(),
+          ...(data.data.tlsDaysRemaining !== null
+            ? { tlsExpiresAt: new Date(Date.now() + data.data.tlsDaysRemaining * 86400000).toISOString() }
+            : {}),
+        };
         setMonitors(prev =>
-          prev.map(m =>
-            m.id === monitor.id
-              ? {
-                  ...m,
-                  lastStatus: data.data.status,
-                  lastLatencyMs: data.data.latencyMs,
-                  lastCheckedAt: new Date().toISOString(),
-                  ...(data.data.tlsDaysRemaining !== null
-                    ? { tlsExpiresAt: new Date(Date.now() + data.data.tlsDaysRemaining * 86400000).toISOString() }
-                    : {}),
-                }
-              : m
-          )
+          prev.map(m => m.id === monitor.id ? { ...m, ...updated } : m)
         );
+        // Sync ke panel
+        setSelectedMonitor(prev => prev?.id === monitor.id ? { ...prev, ...updated } : prev);
       }
     } catch { /* silent */ } finally {
       setCheckingId(null);
@@ -537,10 +541,13 @@ export function CloudMonitorsManagement({ projects }: { projects: Project[] }) {
                   key={monitor.id}
                   className="flex flex-col"
                 >
-                  {/* Monitor Row */}
-                  <div className={`flex items-center gap-4 p-4 hover:bg-muted/20 transition-colors ${
-                    monitor.status === "paused" ? "opacity-60" : ""
-                  }`}>
+                  {/* Monitor Row — clickable */}
+                  <div
+                    className={`flex items-center gap-4 p-4 hover:bg-muted/30 transition-colors cursor-pointer ${
+                      monitor.status === "paused" ? "opacity-60" : ""
+                    } ${selectedMonitor?.id === monitor.id ? "bg-muted/20" : ""}`}
+                    onClick={() => setSelectedMonitor(monitor)}
+                  >
                   {/* Left: Icon + Type */}
                   <div className="p-2 bg-muted rounded-md shrink-0">
                     <TypeIcon type={monitor.type} />
@@ -606,7 +613,7 @@ export function CloudMonitorsManagement({ projects }: { projects: Project[] }) {
                         className="h-8 w-8 text-muted-foreground hover:text-foreground"
                         title="Check now"
                         disabled={checkingId === monitor.id || monitor.status === "paused"}
-                        onClick={() => handleCheckNow(monitor)}
+                        onClick={(e) => { e.stopPropagation(); handleCheckNow(monitor); }}
                       >
                         {checkingId === monitor.id
                           ? <Loader2 size={14} className="animate-spin" />
@@ -622,7 +629,7 @@ export function CloudMonitorsManagement({ projects }: { projects: Project[] }) {
                             : "text-muted-foreground hover:text-foreground"
                         }`}
                         title="View history"
-                        onClick={() => setExpandedId(prev => prev === monitor.id ? null : monitor.id)}
+                        onClick={(e) => { e.stopPropagation(); setExpandedId(prev => prev === monitor.id ? null : monitor.id); }}
                       >
                         <BarChart2 size={14} />
                       </Button>
@@ -632,7 +639,7 @@ export function CloudMonitorsManagement({ projects }: { projects: Project[] }) {
                         className="h-8 w-8"
                         title={monitor.status === "active" ? "Pause monitor" : "Resume monitor"}
                         disabled={togglingId === monitor.id}
-                        onClick={() => handleToggle(monitor)}
+                        onClick={(e) => { e.stopPropagation(); handleToggle(monitor); }}
                       >
                         {togglingId === monitor.id
                           ? <Loader2 size={14} className="animate-spin" />
@@ -647,7 +654,7 @@ export function CloudMonitorsManagement({ projects }: { projects: Project[] }) {
                         className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                         title="Delete monitor"
                         disabled={deletingId === monitor.id}
-                        onClick={() => handleDelete(monitor.id)}
+                        onClick={(e) => { e.stopPropagation(); handleDelete(monitor.id); }}
                       >
                         {deletingId === monitor.id
                           ? <Loader2 size={14} className="animate-spin" />
@@ -679,6 +686,20 @@ export function CloudMonitorsManagement({ projects }: { projects: Project[] }) {
           projectId={selectedProject}
           onClose={() => setShowAdd(false)}
           onCreated={monitor => setMonitors(prev => [...prev, monitor])}
+        />
+      )}
+
+      {/* Monitor Detail Panel */}
+      {selectedMonitor && (
+        <MonitorDetailPanel
+          monitor={selectedMonitor}
+          onClose={() => setSelectedMonitor(null)}
+          onCheckNow={handleCheckNow}
+          onToggle={handleToggle}
+          onDelete={(id) => { handleDelete(id); }}
+          checkingId={checkingId}
+          togglingId={togglingId}
+          deletingId={deletingId}
         />
       )}
     </div>
