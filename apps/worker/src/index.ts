@@ -6,6 +6,8 @@
  *   scheduled() — orchestrator utama cron
  *   queryNeon() — HTTP query helper ke Neon
  *   dispatchNotifications() — kirim alert ke semua channel aktif
+ *   deepReplaceVars() — rekursif replace template vars dalam JSON/plain text
+ *   buildDefaultDiscordEmbed() — generate smart default Discord embed
  *   sendTelegram/sendDiscord/sendWebhook() — channel-specific senders
  *   runCloudChecks() [Phase 5] — evaluasi HTTP/TLS/Keyword monitors
  *   runHttpCheck/runTlsCheck/runKeywordCheck() [Phase 5] — individual check logic
@@ -89,6 +91,95 @@ async function queryNeon(
   return response.json() as Promise<{ rows: Record<string, unknown>[] }>;
 }
 
+// ─── Template Engine ──────────────────────────────────────────────────────────
+
+/** Variabel template yang tersedia untuk semua channel */
+interface TemplateVars {
+  project: string;
+  agentOrMonitor: string;
+  status: string;
+  statusEmoji: string;
+  time: string;
+  url?: string;       // monitor only
+  latency?: string;   // monitor only
+  error?: string;     // monitor only, jika ada
+}
+
+/**
+ * deepReplaceVars: Rekursif replace template variables dalam semua string value.
+ * Support plain string dan nested JSON object/array.
+ * Variabel: {project}, {agent}, {monitor}, {status}, {status_emoji}, {time}, {url}, {latency}, {error}
+ */
+function deepReplaceVars(obj: unknown, vars: TemplateVars): unknown {
+  if (typeof obj === "string") {
+    return obj
+      .replace(/{project}/g, vars.project)
+      .replace(/{agent}/g, vars.agentOrMonitor)
+      .replace(/{monitor}/g, vars.agentOrMonitor)
+      .replace(/{status}/g, vars.status)
+      .replace(/{status_emoji}/g, vars.statusEmoji)
+      .replace(/{time}/g, vars.time)
+      .replace(/{url}/g, vars.url ?? "N/A")
+      .replace(/{latency}/g, vars.latency ?? "N/A")
+      .replace(/{error}/g, vars.error ?? "");
+  }
+  if (Array.isArray(obj)) return obj.map((i) => deepReplaceVars(i, vars));
+  if (typeof obj === "object" && obj !== null) {
+    return Object.fromEntries(
+      Object.entries(obj as Record<string, unknown>).map(([k, v]) => [
+        k,
+        deepReplaceVars(v, vars),
+      ])
+    );
+  }
+  return obj;
+}
+
+/**
+ * buildDefaultDiscordEmbed: Generate smart default Discord embed ketika
+ * user tidak mengisi custom message. Warna merah untuk offline/down,
+ * hijau untuk online/recovered.
+ */
+function buildDefaultDiscordEmbed(
+  vars: TemplateVars,
+  eventType: "offline" | "online",
+  sourceType: "agent" | "monitor"
+): object {
+  const isDown = eventType === "offline";
+  const color = isDown ? 0xe53e3e : 0x38a169;
+  const title = isDown
+    ? `${vars.statusEmoji} Alert — ${sourceType === "agent" ? "Agent" : "Monitor"} Offline`
+    : `${vars.statusEmoji} Recovered`;
+
+  const fields: { name: string; value: string; inline: boolean }[] = [
+    { name: "Project", value: vars.project, inline: true },
+    { name: "Status", value: vars.status, inline: true },
+  ];
+
+  if (sourceType === "monitor") {
+    if (vars.url) fields.push({ name: "URL", value: vars.url, inline: false });
+    if (vars.latency && vars.latency !== "N/A")
+      fields.push({ name: "Latency", value: `${vars.latency}ms`, inline: true });
+    if (isDown && vars.error)
+      fields.push({ name: "Error", value: vars.error, inline: false });
+  }
+
+  fields.push({ name: "Time", value: vars.time, inline: false });
+
+  return {
+    embeds: [
+      {
+        title,
+        description: `**${vars.agentOrMonitor}** is now **${vars.status}**`,
+        color,
+        fields,
+        timestamp: new Date().toISOString(),
+        footer: { text: "EZMON Monitoring" },
+      },
+    ],
+  };
+}
+
 // ─── Notification Dispatchers ─────────────────────────────────────────────────
 
 async function sendTelegram(
@@ -112,15 +203,44 @@ async function sendTelegram(
   }
 }
 
-async function sendDiscord(webhookUrl: string, message: string): Promise<void> {
+/**
+ * sendDiscord: Kirim notifikasi ke Discord webhook.
+ * - Jika message adalah valid JSON object → kirim langsung (user-defined embed/content)
+ * - Jika plain text → wrap sebagai { content: message }
+ * - Jika body adalah object sendDiscordEmbed → kirim embed langsung (smart default)
+ */
+async function sendDiscord(
+  webhookUrl: string,
+  message: string | object
+): Promise<void> {
+  let body: object;
+
+  if (typeof message === "object" && message !== null) {
+    // Sudah berupa object (smart default embed)
+    body = message;
+  } else {
+    // Coba parse sebagai JSON (user-defined JSON template)
+    try {
+      const parsed = JSON.parse(message as string);
+      if (typeof parsed === "object" && parsed !== null) {
+        body = parsed;
+      } else {
+        body = { content: message as string };
+      }
+    } catch {
+      // Plain text
+      body = { content: message as string };
+    }
+  }
+
   const resp = await fetch(webhookUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content: message }),
+    body: JSON.stringify(body),
   });
   if (!resp.ok) {
-    const body = await resp.text();
-    throw new Error(`Discord webhook failed: ${resp.status} - ${body}`);
+    const body2 = await resp.text();
+    throw new Error(`Discord webhook failed: ${resp.status} - ${body2}`);
   }
 }
 
@@ -150,6 +270,12 @@ async function sendWebhook(
 
 // ─── Dispatch to All Enabled Channels ─────────────────────────────────────────
 
+/**
+ * dispatchNotifications: Kirim notifikasi ke semua channel aktif yang eligible.
+ * Filter berdasarkan notify_on (offline/online/both) dan targetType (agent/monitor/all).
+ * Untuk Discord: support JSON template passthrough + smart default embed.
+ * Untuk Telegram: plain text / Markdown template.
+ */
 async function dispatchNotifications(
   databaseUrl: string,
   projectId: string,
@@ -157,12 +283,7 @@ async function dispatchNotifications(
   message: string,
   eventType: "offline" | "online",
   sourceType: "agent" | "monitor",
-  templateVars?: {
-    project: string;
-    agentOrMonitor: string;
-    status: string;
-    time: string;
-  }
+  templateVars?: TemplateVars
 ): Promise<void> {
   // Ambil semua channel yang aktif untuk project ini
   const channelsResult = await queryNeon(
@@ -177,7 +298,7 @@ async function dispatchNotifications(
   if (channels.length === 0) return;
 
   // Filter berdasarkan notify_on dan targetType
-  const eligible = channels.filter(ch => {
+  const eligible = channels.filter((ch) => {
     const n = ch.notify_on ?? "both";
     const notifyMatch = n === "both" || n === eventType;
 
@@ -187,7 +308,9 @@ async function dispatchNotifications(
     const target = cfg.targetType ?? "all";
     const targetMatch = target === "all" || target === sourceType;
 
-    console.log(`[notify] Channel "${ch.name}" notify_on=${n} target=${target} sourceType=${sourceType} → notifyMatch=${notifyMatch} targetMatch=${targetMatch}`);
+    console.log(
+      `[notify] Channel "${ch.name}" notify_on=${n} target=${target} sourceType=${sourceType} → notifyMatch=${notifyMatch} targetMatch=${targetMatch}`
+    );
 
     return notifyMatch && targetMatch;
   });
@@ -199,53 +322,100 @@ async function dispatchNotifications(
 
   for (const ch of eligible) {
     let sendErr: string | null = null;
-    const cfg: any = typeof ch.config_json === "string" ? JSON.parse(ch.config_json) : (ch.config_json ?? {});
-
-    let finalMessage = message;
-    if (templateVars) {
-      const template = eventType === "offline" ? cfg.customOfflineMessage : cfg.customOnlineMessage;
-      if (template) {
-        finalMessage = template
-          .replace(/{project}/g, templateVars.project)
-          .replace(/{agent}/g, templateVars.agentOrMonitor)
-          .replace(/{monitor}/g, templateVars.agentOrMonitor)
-          .replace(/{status}/g, templateVars.status)
-          .replace(/{time}/g, templateVars.time);
-      }
-    }
+    const cfg: any =
+      typeof ch.config_json === "string"
+        ? JSON.parse(ch.config_json)
+        : (ch.config_json ?? {});
 
     try {
       if (ch.type === "telegram" && cfg.botToken && cfg.chatId) {
-        await sendTelegram(cfg.botToken, cfg.chatId, finalMessage);
+        // ── Telegram: plain text / Markdown template ──────────────────────
+        let finalMsg = message;
+        if (templateVars) {
+          const tpl =
+            eventType === "offline"
+              ? cfg.customOfflineMessage
+              : cfg.customOnlineMessage;
+          if (tpl && typeof tpl === "string") {
+            finalMsg = deepReplaceVars(tpl, templateVars) as string;
+          }
+        }
+        await sendTelegram(cfg.botToken, cfg.chatId, finalMsg);
       } else if (ch.type === "discord" && cfg.webhookUrl) {
-        await sendDiscord(cfg.webhookUrl, finalMessage);
+        // ── Discord: JSON passthrough / plain text / smart default embed ──
+        const tpl =
+          eventType === "offline"
+            ? cfg.customOfflineMessage
+            : cfg.customOnlineMessage;
+
+        if (!tpl && templateVars) {
+          // Smart default embed — generate embed EZMON yang informatif
+          const embed = buildDefaultDiscordEmbed(templateVars, eventType, sourceType);
+          await sendDiscord(cfg.webhookUrl, embed);
+        } else if (tpl && templateVars) {
+          // Parse JSON dulu ke variable — catch HANYA untuk JSON.parse error
+          // sendDiscord error ditangkap outer catch agar tidak coba kirim dua kali
+          let discordBody: object | string;
+          try {
+            const parsed = JSON.parse(tpl);
+            if (typeof parsed === "object" && parsed !== null) {
+              discordBody = deepReplaceVars(parsed, templateVars) as object;
+            } else {
+              discordBody = deepReplaceVars(tpl, templateVars) as string;
+            }
+          } catch {
+            // JSON.parse gagal → plain text
+            discordBody = deepReplaceVars(tpl, templateVars) as string;
+          }
+          // Kirim satu kali — error ditangkap outer catch
+          await sendDiscord(cfg.webhookUrl, discordBody);
+        } else {
+          // Tidak ada templateVars, kirim message default sebagai plain text
+          await sendDiscord(cfg.webhookUrl, message);
+        }
       } else if (ch.type === "webhook" && cfg.url) {
-        await sendWebhook(cfg.url, finalMessage, cfg.secret, cfg.headers);
+        // ── Webhook: tetap seperti sebelumnya (belum dimodifikasi) ────────
+        let finalMsg = message;
+        if (templateVars) {
+          const tpl =
+            eventType === "offline"
+              ? cfg.customOfflineMessage
+              : cfg.customOnlineMessage;
+          if (tpl && typeof tpl === "string") {
+            finalMsg = deepReplaceVars(tpl, templateVars) as string;
+          }
+        }
+        await sendWebhook(cfg.url, finalMsg, cfg.secret, cfg.headers);
       } else {
         sendErr = `Unknown or misconfigured channel type: ${ch.type}`;
       }
-      console.log(`[notify] Sent via ${ch.type} channel "${ch.name}"`);
+      if (!sendErr) console.log(`[notify] Sent via ${ch.type} channel "${ch.name}"`);
     } catch (e) {
       sendErr = String(e);
       console.error(`[notify] Failed ${ch.type} channel "${ch.name}": ${sendErr}`);
     }
 
-    // Catat hasilnya di alert_events
-    await queryNeon(
-      databaseUrl,
-      `INSERT INTO alert_events (id, incident_id, channel_id, status, sent_at, created_at)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, NOW())`,
-      [
-        incidentId,
-        ch.id,
-        sendErr ? "failed" : "sent",
-        sendErr ? null : new Date().toISOString(),
-      ]
-    );
-    
-    // Log error secara terpisah (tidak disimpan ke DB karena kolom tidak ada di schema)
+    // Catat hasilnya di alert_events — dibungkus try/catch sendiri agar
+    // Neon timeout tidak crash loop dan channel berikutnya tetap diproses
+    try {
+      await queryNeon(
+        databaseUrl,
+        `INSERT INTO alert_events (id, incident_id, channel_id, status, sent_at, created_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, NOW())`,
+        [
+          incidentId,
+          ch.id,
+          sendErr ? "failed" : "sent",
+          sendErr ? null : new Date().toISOString(),
+        ]
+      );
+    } catch (auditErr) {
+      // Audit gagal tidak boleh menghentikan notifikasi ke channel lain
+      console.error(`[notify] alert_events INSERT failed for channel ${ch.id}: ${auditErr}`);
+    }
+
     if (sendErr) {
-      console.error(`[notify] Channel ${ch.id} failed: ${sendErr}`);
+      console.error(`[notify] Channel ${ch.id} (${ch.type}) error: ${sendErr}`);
     }
   }
 }
@@ -607,7 +777,11 @@ async function runCloudChecks(databaseUrl: string): Promise<void> {
             project: monitor.project_name || "Unknown Project",
             agentOrMonitor: monitor.name,
             status: isDown ? "DOWN" : "RECOVERED",
-            time: new Date().toISOString()
+            statusEmoji: isDown ? "🔴" : "🟢",
+            time: new Date().toISOString(),
+            url: monitor.url,
+            latency: checkResult.latencyMs !== null ? String(checkResult.latencyMs) : undefined,
+            error: isDown && checkResult.error ? checkResult.error : undefined,
           }
         );
         console.log(`[cloud] Dispatched ${label} notification for monitor "${monitor.name}"`);
@@ -784,7 +958,8 @@ const worker = {
               project: agent.project_name || "Unknown Project",
               agentOrMonitor: agent.name,
               status: "OFFLINE",
-              time: agent.offline_deadline_at || new Date().toISOString()
+              statusEmoji: "🔴",
+              time: agent.offline_deadline_at || new Date().toISOString(),
             });
           }
         } else {
@@ -836,7 +1011,8 @@ const worker = {
             project: agent.project_name || "Unknown Project",
             agentOrMonitor: agent.name,
             status: "ONLINE",
-            time: new Date().toISOString()
+            statusEmoji: "🟢",
+            time: new Date().toISOString(),
           });
         }
       }

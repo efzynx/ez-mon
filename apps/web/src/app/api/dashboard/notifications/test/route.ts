@@ -1,6 +1,19 @@
+// Tujuan: Test notification endpoint — kirim dummy alert ke channel yang dikonfigurasi user
+// Caller: alert-channels.tsx (tombol "Test Offline" / "Test Online")
+// Dependensi: @/lib/notify (sendTelegram, sendDiscord, sendWebhook, deepReplaceVars, buildDefaultDiscordEmbed)
+// Main Functions: POST handler
+// Side Effects: HTTP POST ke Telegram/Discord/Webhook dengan dummy data
+
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { sendTelegram, sendDiscord, sendWebhook } from "@/lib/notify";
+import {
+  sendTelegram,
+  sendDiscord,
+  sendWebhook,
+  deepReplaceVars,
+  buildDefaultDiscordEmbed,
+  type TemplateVars,
+} from "@/lib/notify";
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,38 +29,63 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Missing required fields" }, { status: 400 });
     }
 
-    // Dummy data — agent dan monitor menggunakan nama berbeda agar bisa dibedakan di preview
-    const DUMMY_AGENT   = "test-agent-1";
-    const DUMMY_MONITOR = "test-monitor-1";
-    const dummyStatus   = eventType === "offline" ? "OFFLINE" : "ONLINE";
-    const dummyTime     = new Date().toISOString();
-    const dummyProject  = "EZMON Demo Project";
+    // Dummy templateVars untuk preview — sama untuk agent dan monitor
+    const dummyVars: TemplateVars = {
+      project: "EZMON Demo Project",
+      agentOrMonitor: type === "discord" ? "prod-server-01" : "test-agent-1",
+      status: eventType === "offline" ? "OFFLINE" : "ONLINE",
+      statusEmoji: eventType === "offline" ? "🔴" : "🟢",
+      time: new Date().toISOString(),
+      url: "https://api.example.com/health",
+      latency: "342",
+      error: eventType === "offline" ? "Connection timeout after 10s" : undefined,
+    };
 
-    let defaultMsg = "";
-    if (eventType === "offline") {
-      defaultMsg = `🔴 *EZMON Alert*\nAgent/Monitor *${DUMMY_AGENT}* is OFFLINE\nMissed heartbeat deadline at ${dummyTime}`;
-    } else {
-      defaultMsg = `🟢 *EZMON Recovery*\nAgent/Monitor *${DUMMY_AGENT}* is back ONLINE`;
-    }
-
-    let finalMessage = defaultMsg;
-    const template = eventType === "offline" ? config.customOfflineMessage : config.customOnlineMessage;
-
-    if (template) {
-      finalMessage = template
-        .replace(/{project}/g, dummyProject)
-        .replace(/{agent}/g, DUMMY_AGENT)
-        .replace(/{monitor}/g, DUMMY_MONITOR)
-        .replace(/{status}/g, dummyStatus)
-        .replace(/{time}/g, dummyTime);
-    }
+    // Default message jika tidak ada custom template
+    const defaultMsg =
+      eventType === "offline"
+        ? `🔴 *EZMON Alert*\nAgent/Monitor *${dummyVars.agentOrMonitor}* is OFFLINE`
+        : `🟢 *EZMON Recovery*\nAgent/Monitor *${dummyVars.agentOrMonitor}* is back ONLINE`;
 
     if (type === "telegram" && config.botToken && config.chatId) {
-      await sendTelegram(config.botToken, config.chatId, finalMessage);
+      // Telegram: plain text / Markdown template
+      let finalMsg = defaultMsg;
+      const tpl = eventType === "offline" ? config.customOfflineMessage : config.customOnlineMessage;
+      if (tpl && typeof tpl === "string") {
+        finalMsg = deepReplaceVars(tpl, dummyVars) as string;
+      }
+      await sendTelegram(config.botToken, config.chatId, finalMsg);
     } else if (type === "discord" && config.webhookUrl) {
-      await sendDiscord(config.webhookUrl, finalMessage);
+      // Discord: JSON passthrough / plain text / smart default embed
+      const tpl = eventType === "offline" ? config.customOfflineMessage : config.customOnlineMessage;
+
+      if (!tpl) {
+        // Smart default embed — sourceType "agent" untuk test umum
+        const embed = buildDefaultDiscordEmbed(dummyVars, eventType as "offline" | "online", "agent");
+        await sendDiscord(config.webhookUrl, embed);
+      } else {
+        try {
+          const parsed = JSON.parse(tpl);
+          if (typeof parsed === "object" && parsed !== null) {
+            // JSON mode: deep replace vars di semua string values
+            const replaced = deepReplaceVars(parsed, dummyVars);
+            await sendDiscord(config.webhookUrl, replaced as object);
+          } else {
+            throw new Error("not object");
+          }
+        } catch {
+          // Plain text mode
+          const finalMsg = deepReplaceVars(tpl, dummyVars) as string;
+          await sendDiscord(config.webhookUrl, finalMsg);
+        }
+      }
     } else if (type === "webhook" && config.url) {
-      await sendWebhook(config.url, finalMessage, config.secret, config.headers);
+      let finalMsg = defaultMsg;
+      const tpl = eventType === "offline" ? config.customOfflineMessage : config.customOnlineMessage;
+      if (tpl && typeof tpl === "string") {
+        finalMsg = deepReplaceVars(tpl, dummyVars) as string;
+      }
+      await sendWebhook(config.url, finalMsg, config.secret, config.headers);
     } else {
       return NextResponse.json({ success: false, error: "Incomplete channel configuration" }, { status: 400 });
     }

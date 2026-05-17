@@ -616,33 +616,85 @@ export function AlertChannelsManagement() {
               <div className="pt-4 border-t border-border mt-6">
                 <div className="flex items-center gap-2 mb-4 text-muted-foreground">
                   <Info size={16} />
-                  <span className="text-sm font-medium">Custom Message Templates (Optional)</span>
+                  <span className="text-sm font-medium">
+                    Custom Message Templates
+                    <span className="text-muted-foreground font-normal"> (Optional)</span>
+                  </span>
                 </div>
+
+                {/* Discord-specific tip */}
+                {formType === "discord" && (
+                  <div className="bg-indigo-500/8 border border-indigo-500/20 rounded-md p-3 mb-4 text-xs text-indigo-300 space-y-1.5">
+                    <p className="font-semibold text-indigo-200">💡 Discord Rich Embed Support</p>
+                    <p className="text-muted-foreground">
+                      Discord mendukung JSON embed yang kaya. Buat preview embed-mu terlebih dahulu di{" "}
+                      <a
+                        href="https://discohook.org"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-indigo-400 underline underline-offset-2 hover:text-indigo-300"
+                      >
+                        discohook.org
+                      </a>
+                      , lalu paste JSON-nya di sini. Variabel EZMON akan di-replace secara otomatis di semua nilai string dalam JSON.
+                    </p>
+                    <p className="text-muted-foreground/70 italic">Jika dikosongkan, EZMON akan mengirim embed default yang rapi secara otomatis.</p>
+                  </div>
+                )}
+
                 <div className="bg-muted/30 border border-border rounded-md p-3 mb-4 text-xs text-muted-foreground space-y-1">
-                  <p>Use variables to customize your message:</p>
+                  <p>Available variables:</p>
                   <ul className="list-disc pl-4 space-y-0.5">
                     <li><code className="bg-muted px-1 rounded">{'{project}'}</code> : Project name</li>
-                    <li><code className="bg-muted px-1 rounded">{'{agent}'}</code> / <code className="bg-muted px-1 rounded">{'{monitor}'}</code> : Name of the agent or cloud monitor</li>
-                    <li><code className="bg-muted px-1 rounded">{'{status}'}</code> : e.g., DOWN, OFFLINE, RECOVERED, ONLINE</li>
+                    <li><code className="bg-muted px-1 rounded">{'{agent}'}</code> / <code className="bg-muted px-1 rounded">{'{monitor}'}</code> : Agent or monitor name</li>
+                    <li><code className="bg-muted px-1 rounded">{'{status}'}</code> : Status text (OFFLINE, DOWN, ONLINE, RECOVERED)</li>
+                    <li><code className="bg-muted px-1 rounded">{'{status_emoji}'}</code> : Auto emoji 🔴 / 🟢</li>
                     <li><code className="bg-muted px-1 rounded">{'{time}'}</code> : Event timestamp</li>
+                    {formType === "discord" && (
+                      <>
+                        <li><code className="bg-muted px-1 rounded">{'{url}'}</code> : Monitor URL <span className="text-muted-foreground/60">(monitor only)</span></li>
+                        <li><code className="bg-muted px-1 rounded">{'{latency}'}</code> : Response latency ms <span className="text-muted-foreground/60">(monitor only)</span></li>
+                        <li><code className="bg-muted px-1 rounded">{'{error}'}</code> : Error message if any <span className="text-muted-foreground/60">(monitor only)</span></li>
+                      </>
+                    )}
                   </ul>
-                  <p className="pt-1 text-muted-foreground/80">Example: <code className="bg-muted px-1 rounded">{"{project} ({agent}) is {status} at {time}"}</code></p>
+                  {formType === "discord" ? (
+                    <p className="pt-1 text-muted-foreground/80">
+                      JSON example: <code className="bg-muted px-1 rounded">{'{"embeds":[{"title":"{status_emoji} {monitor} is {status}","color":16711680}]}'}</code>
+                    </p>
+                  ) : (
+                    <p className="pt-1 text-muted-foreground/80">Example: <code className="bg-muted px-1 rounded">{"{project} ({agent}) is {status} at {time}"}</code></p>
+                  )}
                 </div>
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium mb-1.5 text-foreground">Offline/Down Message</label>
+                    <label className="block text-sm font-medium mb-1.5 text-foreground">
+                      {formType === "discord" ? "Offline/Down Message or JSON Embed" : "Offline/Down Message"}
+                    </label>
                     <textarea
-                      className="bg-background border border-border rounded-md py-2 px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-full placeholder:text-muted-foreground resize-y min-h-[60px]"
-                      placeholder="e.g. 🔴 Agent {agent} is {status}!"
+                      className="bg-background border border-border rounded-md py-2 px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-full placeholder:text-muted-foreground resize-y font-mono"
+                      style={{ minHeight: formType === "discord" ? "120px" : "60px" }}
+                      placeholder={
+                        formType === "discord"
+                          ? '{"content":"Alert!","embeds":[{"title":"{status_emoji} {monitor}","color":15548997}]}'
+                          : "e.g. 🔴 Agent {agent} is {status}!"
+                      }
                       value={formCustomOffline}
                       onChange={(e) => setFormCustomOffline(e.target.value)}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1.5 text-foreground">Online/Recovered Message</label>
+                    <label className="block text-sm font-medium mb-1.5 text-foreground">
+                      {formType === "discord" ? "Online/Recovered Message or JSON Embed" : "Online/Recovered Message"}
+                    </label>
                     <textarea
-                      className="bg-background border border-border rounded-md py-2 px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-full placeholder:text-muted-foreground resize-y min-h-[60px]"
-                      placeholder="e.g. 🟢 Agent {agent} has {status}!"
+                      className="bg-background border border-border rounded-md py-2 px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-full placeholder:text-muted-foreground resize-y font-mono"
+                      style={{ minHeight: formType === "discord" ? "120px" : "60px" }}
+                      placeholder={
+                        formType === "discord"
+                          ? '{"content":"Recovered!","embeds":[{"title":"{status_emoji} {monitor}","color":3066993}]}'
+                          : "e.g. 🟢 Agent {agent} has {status}!"
+                      }
                       value={formCustomOnline}
                       onChange={(e) => setFormCustomOnline(e.target.value)}
                     />

@@ -18,6 +18,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## v0.1.5-beta.1 — 2026-05-17
+
+### Added
+- **Discord Rich Embed Support** — `sendDiscord()` now supports three modes: smart default embed (auto-generated with color, fields, and timestamp), JSON passthrough (user-defined Discord embed JSON sent directly), and plain text fallback
+- **Template Engine: `deepReplaceVars()`** — Recursive variable replacement across all string values in nested JSON objects/arrays, enabling full embed customization without manual string building
+- **Smart Default Discord Embed** — When no custom message is configured, EZMON auto-generates a rich embed with red/green color coding, project/status/time fields, and "EZMON Monitoring" footer
+- **New Template Variables** — Added `{status_emoji}` (auto 🔴/🟢), `{url}` (monitor URL), `{latency}` (response latency ms), `{error}` (error message) for Discord and all channels
+- **Discord JSON Embed UI** — Alert Channels form now shows a Discord-specific tip box (with link to discohook.org), larger mono textarea (120px), JSON example in variable hints, and contextual monitor-only variable hints
+
+### Fixed
+- **Notification loop crash on Neon timeout** — `alert_events` INSERT in `dispatchNotifications()` was outside `try/catch`; a Neon transient timeout would crash the entire dispatch loop and skip remaining channels. Now wrapped in isolated `try/catch` so audit failure never blocks channel delivery
+- **Discord inner catch swallowing send errors** — Discord JSON mode `catch` block was catching both `JSON.parse` errors and `sendDiscord` errors, causing double-send attempts on failure. Refactored to parse into variable first, send once, with outer `catch` handling send errors
+- **Telegram `TypeError: fetch failed` from Next.js** — Node.js undici (Next.js native fetch) prefers IPv6 when resolving `api.telegram.org`, causing connection failure while wrangler (miniflare) successfully uses IPv4. Fixed by adding `NODE_OPTIONS='--dns-result-order=ipv4first'` to the web dev script
+- **Missing `statusEmoji` in heartbeat `templateVars`** — `apps/web/src/app/api/agent/heartbeat/route.ts` was passing incomplete `templateVars` without `statusEmoji`, causing TypeScript errors after `TemplateVars` interface was updated
+
+### Changed
+- `sendDiscord()` signature changed from `message: string` to `message: string | object` in both worker and `notify.ts` to support object-based embed payloads
+- `TemplateVars` interface promoted to exported type in `notify.ts` for reuse across heartbeat route and test endpoint
+- `dispatchNotifications()` (worker) and `dispatchNotification()` (web) now fully in sync with identical Discord, Telegram, and Webhook dispatch logic
+- Test endpoint (`/api/dashboard/notifications/test`) updated to use `deepReplaceVars` and `buildDefaultDiscordEmbed` with dummy monitor-specific fields
+
+---
+
 ## v0.1.4 — 2026-05-11
 
 ### Changed
