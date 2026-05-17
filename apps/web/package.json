@@ -1,6 +1,6 @@
 {
   "name": "@ezmon/web",
-  "version": "0.1.5-beta.2",
+  "version": "0.1.5",
   "private": true,
   "scripts": {
     "dev": "NODE_OPTIONS='--dns-result-order=ipv4first' next dev --turbopack",

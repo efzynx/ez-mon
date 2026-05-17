@@ -641,14 +641,14 @@ export function AlertChannelsManagement() {
                     <p className="text-muted-foreground">
                       Discord supports rich JSON embeds. Build and preview your embed at{" "}
                       <a
-                        href="https://discohook.org"
+                        href="https://discord-webhook.com"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-indigo-400 underline underline-offset-2 hover:text-indigo-300"
                       >
-                        discohook.org
+                        discord-webhook.com
                       </a>
-                      , then paste the JSON here. EZMON variables will be automatically replaced in all string values within the JSON.
+                      {" "}(no login required — click <strong className="text-indigo-200">JSON</strong> after preview to copy), then paste it here. EZMON variables will be automatically replaced in all string values within the JSON.
                     </p>
                     <p className="text-muted-foreground/70 italic">If left empty, EZMON will send a clean default embed automatically.</p>
                   </div>

@@ -7,7 +7,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { AlertTriangle, CheckCircle, Filter } from "lucide-react";
+import { AlertTriangle, CheckCircle, Filter, Globe, ExternalLink } from "lucide-react";
 import type { DashboardIncident } from "@ezmon/shared";
 
 import { Card, CardContent } from "@/components/ui/card";
@@ -212,7 +212,12 @@ export default function IncidentsPage() {
                   {/* Content */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 mb-1 flex-wrap">
-                      <p className="font-semibold text-foreground truncate">{incident.agentName}</p>
+                      {/* Nama: agent name atau monitor name dari metadata */}
+                      <p className="font-semibold text-foreground truncate">
+                        {incident.agentName
+                          ?? incident.metadata?.monitor_name
+                          ?? "Unknown"}
+                      </p>
                       <Badge
                         className={`uppercase text-[10px] tracking-wider font-bold shrink-0 ${
                           isOpen
@@ -227,7 +232,28 @@ export default function IncidentsPage() {
                         />
                         {incident.status}
                       </Badge>
+                      {/* Badge Cloud Monitor jika tidak ada agent */}
+                      {!incident.agentId && incident.metadata?.monitor_name && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                          <Globe size={9} />
+                          Cloud Monitor
+                        </span>
+                      )}
                     </div>
+
+                    {/* Monitor URL jika cloud monitor */}
+                    {!incident.agentId && incident.metadata?.url && (
+                      <a
+                        href={incident.metadata.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors font-mono mt-0.5"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span className="truncate max-w-xs">{incident.metadata.url}</span>
+                        <ExternalLink size={10} className="shrink-0" />
+                      </a>
+                    )}
 
                     {/* Incident type */}
                     <p className="text-xs font-mono font-bold text-muted-foreground mt-1 tracking-wider uppercase">

@@ -8,15 +8,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
-- 
+-
 
 ### Changed
-- 
+-
 
 ### Fixed
-- 
+-
 
 ---
+
+## v0.1.5 — 2026-05-17
+
+### Added
+- **`alert_events` Retention Cleanup** — Worker cron now deletes `alert_events` records older than 7 days (STEP 6), preventing unbounded table growth while retaining sufficient history for notification delivery debugging
+
+### Fixed
+- **Double Discord notification for cloud monitors** — Added `sentDiscordUrls` Set in `dispatchNotifications()` to deduplicate webhook URLs within a single dispatch loop; prevents two sends when multiple channels share the same webhook URL
+- **Race condition in cloud monitor state detection** — `UPDATE cloud_monitors` now uses atomic `RETURNING` to derive `prevStatus` from the database at update time, eliminating duplicate transition detections from overlapping cron runs
+- **Incident page shows "Unknown" for cloud monitor incidents** — Incidents from cloud monitors now display `metadata.monitor_name` as the incident title, with `metadata.url` shown as a clickable external link and a "Cloud Monitor" badge for visual distinction from agent incidents
+- **Agent installer script in Indonesian** — All user-facing messages in `apps/web/public/install.sh` translated to English (info, ok, warn, fatal messages and inline comments)
+
+### Changed
+- Discord embed tip link updated from `discohook.org` to `discord-webhook.com` — no login required; JSON can be copied directly after preview
+- `install.sh` updated: all Indonesian-language output messages replaced with English equivalents
 
 ## v0.1.5-beta.1 — 2026-05-17
 
@@ -25,7 +40,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Template Engine: `deepReplaceVars()`** — Recursive variable replacement across all string values in nested JSON objects/arrays, enabling full embed customization without manual string building
 - **Smart Default Discord Embed** — When no custom message is configured, EZMON auto-generates a rich embed with red/green color coding, project/status/time fields, and "EZMON Monitoring" footer
 - **New Template Variables** — Added `{status_emoji}` (auto 🔴/🟢), `{url}` (monitor URL), `{latency}` (response latency ms), `{error}` (error message) for Discord and all channels
-- **Discord JSON Embed UI** — Alert Channels form now shows a Discord-specific tip box (with link to discohook.org), larger mono textarea (120px), JSON example in variable hints, and contextual monitor-only variable hints
+- **Discord JSON Embed UI** — Alert Channels form now shows a Discord-specific tip box (with link to discord-webhook.com), larger mono textarea (120px), JSON example in variable hints, and contextual monitor-only variable hints
 
 ### Fixed
 - **Notification loop crash on Neon timeout** — `alert_events` INSERT in `dispatchNotifications()` was outside `try/catch`; a Neon transient timeout would crash the entire dispatch loop and skip remaining channels. Now wrapped in isolated `try/catch` so audit failure never blocks channel delivery

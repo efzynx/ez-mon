@@ -320,12 +320,25 @@ async function dispatchNotifications(
     return;
   }
 
+  // Dedup per webhook URL untuk Discord — cegah double-send jika ada
+  // dua channel Discord dengan webhookUrl yang sama (misal satu custom, satu default).
+  const sentDiscordUrls = new Set<string>();
+
   for (const ch of eligible) {
     let sendErr: string | null = null;
     const cfg: any =
       typeof ch.config_json === "string"
         ? JSON.parse(ch.config_json)
         : (ch.config_json ?? {});
+
+    // Dedup per webhook URL untuk Discord — cegah double-send jika ada
+    // dua channel Discord dengan URL identik (misal satu custom, satu default).
+    if (ch.type === "discord" && cfg.webhookUrl) {
+      if (sentDiscordUrls.has(cfg.webhookUrl)) {
+        console.log(`[notify] Skip duplicate Discord webhook URL for channel "${ch.name}" — already sent this event`);
+        continue;
+      }
+    }
 
     try {
       if (ch.type === "telegram" && cfg.botToken && cfg.chatId) {
@@ -373,6 +386,8 @@ async function dispatchNotifications(
           // Tidak ada templateVars, kirim message default sebagai plain text
           await sendDiscord(cfg.webhookUrl, message);
         }
+        // Tandai URL ini sudah terkirim dalam satu dispatch loop ini
+        sentDiscordUrls.add(cfg.webhookUrl);
       } else if (ch.type === "webhook" && cfg.url) {
         // ── Webhook: tetap seperti sebelumnya (belum dimodifikasi) ────────
         let finalMsg = message;
@@ -658,13 +673,15 @@ async function runCloudChecks(databaseUrl: string): Promise<void> {
       ]
     );
 
-    // Update cloud_monitors: lastStatus, lastCheckedAt, lastLatencyMs, nextCheckAt, tlsExpiresAt
+    // Update cloud_monitors secara ATOMIC dan ambil last_status sebelumnya.
+    // Menggunakan RETURNING untuk mencegah race condition antara dua cron run:
+    // hanya satu UPDATE yang akan mengembalikan baris jika status benar-benar berubah.
     const nextCheckAt = new Date(Date.now() + monitor.interval_sec * 1000).toISOString();
     const tlsExpiresAt = checkResult.tlsDaysRemaining !== null
       ? new Date(Date.now() + checkResult.tlsDaysRemaining * 86400000).toISOString()
       : null;
 
-    await queryNeon(
+    const updateRes = await queryNeon(
       databaseUrl,
       `UPDATE cloud_monitors
        SET last_status = $1,
@@ -673,7 +690,8 @@ async function runCloudChecks(databaseUrl: string): Promise<void> {
            next_check_at = $3,
            tls_expires_at = COALESCE($4::timestamptz, tls_expires_at),
            updated_at = NOW()
-       WHERE id = $5`,
+       WHERE id = $5
+       RETURNING (SELECT last_status FROM cloud_monitors WHERE id = $5) AS prev_status`,
       [
         checkResult.status,
         checkResult.latencyMs,
@@ -684,8 +702,8 @@ async function runCloudChecks(databaseUrl: string): Promise<void> {
     );
 
     // ── Deteksi transisi status dan kirim notifikasi ─────────────────────────
-    // Hanya kirim jika: sebelumnya bukan 'unknown' DAN status berubah
-    const prevStatus = monitor.last_status;
+    // Gunakan prev_status dari RETURNING — lebih akurat dan race-condition safe
+    const prevStatus = (updateRes.rows[0] as { prev_status?: string } | undefined)?.prev_status ?? monitor.last_status;
     const newStatus = checkResult.status;
     const isTransition = (prevStatus !== "unknown" && prevStatus !== newStatus) || (prevStatus === "unknown" && newStatus === "down");
 
@@ -1045,6 +1063,18 @@ const worker = {
         console.log(`[evaluator] Retention cleanup cloud_check_results complete (30 days)`);
       } catch (e) {
         console.error("[evaluator] Cloud results retention error:", e);
+      }
+
+      // ── STEP 6: Retention Cleanup — alert_events (7 hari) ────────────────────
+      // alert_events adalah audit log pengiriman notifikasi. 7 hari cukup untuk debug.
+      try {
+        await queryNeon(
+          env.DATABASE_URL,
+          `DELETE FROM alert_events WHERE created_at < NOW() - INTERVAL '7 days'`
+        );
+        console.log(`[evaluator] Retention cleanup alert_events complete (7 days)`);
+      } catch (e) {
+        console.error("[evaluator] alert_events retention error:", e);
       }
 
       console.log("[evaluator] Evaluation complete");
