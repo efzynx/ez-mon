@@ -749,7 +749,7 @@ async function runCloudChecks(databaseUrl: string): Promise<void> {
           const incRes = await queryNeon(
             databaseUrl,
             `INSERT INTO incidents (id, project_id, agent_id, type, status, started_at, created_at, metadata)
-             VALUES (gen_random_uuid(), $1, NULL, 'monitor_down', 'open', NOW(), NOW(), $2::jsonb)
+             VALUES (gen_random_uuid(), $1, NULL, 'monitor_down', 'open', NOW(), NOW(), cast($2 as jsonb))
              RETURNING id`,
             [monitor.project_id, JSON.stringify({ monitor_id: monitor.id, monitor_name: monitor.name, url: monitor.url })]
           );
@@ -774,7 +774,7 @@ async function runCloudChecks(databaseUrl: string): Promise<void> {
           const incRes = await queryNeon(
             databaseUrl,
             `INSERT INTO incidents (id, project_id, agent_id, type, status, started_at, resolved_at, created_at, metadata)
-             VALUES (gen_random_uuid(), $1, NULL, 'monitor_down', 'resolved', NOW(), NOW(), NOW(), $2::jsonb)
+             VALUES (gen_random_uuid(), $1, NULL, 'monitor_down', 'resolved', NOW(), NOW(), NOW(), cast($2 as jsonb))
              RETURNING id`,
             [monitor.project_id, JSON.stringify({ monitor_id: monitor.id, monitor_name: monitor.name, url: monitor.url })]
           );

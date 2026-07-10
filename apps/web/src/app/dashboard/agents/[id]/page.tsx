@@ -45,11 +45,13 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
       const projRes = await fetch("/api/dashboard/projects");
       const projData = await projRes.json();
       
-      if (!projData.success || projData.data.length === 0) {
+      if (!projData.success || !projData.data || projData.data.length === 0) {
         throw new Error("No project found");
       }
       
-      const projectId = projData.data[0].id;
+      const activeProjId = typeof window !== "undefined" ? localStorage.getItem("ezmon_active_project") : null;
+      const isValid = projData.data.some((p: any) => p.id === activeProjId);
+      const projectId = isValid && activeProjId ? activeProjId : projData.data[0].id;
       
       const res = await fetch(`/api/dashboard/overview?projectId=${projectId}`);
       const data = await res.json();

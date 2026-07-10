@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
     await db().execute(sql`
       INSERT INTO metric_buckets (id, agent_id, bucket_start, bucket_size_sec, cpu_avg, cpu_max, cpu_cores_avg, mem_avg, disk_avg, load_avg, rx_sum, tx_sum, sample_count)
       VALUES (gen_random_uuid(), ${data.agentId}, ${bucketStart}, ${DEFAULTS.BUCKET_SIZE_SEC},
-              ${data.cpuPct}, ${data.cpuPct}, ${cpuCoresJson}::json,
+              ${data.cpuPct}, ${data.cpuPct}, cast(${cpuCoresJson} as json),
               ${(data.memUsedMb / data.memTotalMb) * 100},
               ${(data.diskUsedMb / data.diskTotalMb) * 100},
               ${data.load1 ?? 0},
@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
       ON CONFLICT (agent_id, bucket_start, bucket_size_sec) DO UPDATE SET
         cpu_avg = (metric_buckets.cpu_avg * metric_buckets.sample_count + ${data.cpuPct}) / (metric_buckets.sample_count + 1),
         cpu_max = GREATEST(metric_buckets.cpu_max, ${data.cpuPct}),
-        cpu_cores_avg = ${cpuCoresJson}::json,
+        cpu_cores_avg = cast(${cpuCoresJson} as json),
         mem_avg = (metric_buckets.mem_avg * metric_buckets.sample_count + ${(data.memUsedMb / data.memTotalMb) * 100}) / (metric_buckets.sample_count + 1),
         disk_avg = (metric_buckets.disk_avg * metric_buckets.sample_count + ${(data.diskUsedMb / data.diskTotalMb) * 100}) / (metric_buckets.sample_count + 1),
         load_avg = (COALESCE(metric_buckets.load_avg, 0) * metric_buckets.sample_count + ${data.load1 ?? 0}) / (metric_buckets.sample_count + 1),
