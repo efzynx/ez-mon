@@ -11,12 +11,13 @@ port = 8787
 crons = ["* * * * *"]
 
 [vars]
-# HUB_URL will be set via wrangler secret or dashboard
-# DATABASE_URL will be set via wrangler secret
+# Semua query database diproxy melalui Hub API, bukan koneksi TCP langsung.
+# Set secrets via: npx wrangler secret put <KEY>
 
 # [secrets]
-# DATABASE_URL - Neon connection string
-# WORKER_SECRET - shared secret for hub API auth (optional)
+# HUB_URL      - URL deployment Vercel (contoh: https://ezmon.vercel.app)
+# WORKER_SECRET - shared secret untuk autentikasi ke Hub API (wajib)
+# DATABASE_URL  - legacy, tidak digunakan langsung oleh Worker
 
 [env.beta]
 name = "ezmon-evaluator-beta"
