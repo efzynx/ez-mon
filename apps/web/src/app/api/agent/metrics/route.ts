@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
     // Use raw SQL for the upsert with incremental aggregation
     await db().execute(sql`
       INSERT INTO metric_buckets (id, agent_id, bucket_start, bucket_size_sec, cpu_avg, cpu_max, cpu_cores_avg, mem_avg, disk_avg, load_avg, rx_sum, tx_sum, sample_count)
-      VALUES (gen_random_uuid(), ${data.agentId}, ${bucketStart}, ${DEFAULTS.BUCKET_SIZE_SEC},
+      VALUES (gen_random_uuid(), ${data.agentId}, ${bucketStart.toISOString()}, ${DEFAULTS.BUCKET_SIZE_SEC},
               ${data.cpuPct}, ${data.cpuPct}, cast(${cpuCoresJson} as json),
               ${(data.memUsedMb / data.memTotalMb) * 100},
               ${(data.diskUsedMb / data.diskTotalMb) * 100},
