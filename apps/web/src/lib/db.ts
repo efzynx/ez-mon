@@ -1,7 +1,7 @@
 import { getDb } from "@ezmon/db";
 
-// Singleton per request in serverless — each invocation gets a fresh HTTP connection
-// This is fine for Neon HTTP driver as it creates a new connection per query
+// Singleton db instance in serverless — reused across hot invocations to reuse TCP connection pool
+// This pattern works for postgres-js which handles local connection pooling internally
 let _db: ReturnType<typeof getDb> | null = null;
 
 export function db() {

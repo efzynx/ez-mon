@@ -29,6 +29,7 @@ Thumbs.db
 
 # ─── Database Migrations Meta ─────────────────────────────────────────────────
 drizzle/meta/
+neon-backup.sql
 
 # ─── Go Agent ─────────────────────────────────────────────────────────────────
 apps/agent/ezmon-agent

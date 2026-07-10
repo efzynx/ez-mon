@@ -64,31 +64,31 @@ interface MonitorRow {
   project_name?: string;
 }
 
-// ─── Neon HTTP Query Helper ───────────────────────────────────────────────────
+// ─── Database Query Helper (Universal Postgres) ───────────────────────────────
+import postgres from "postgres";
 
+let sqlClient: ReturnType<typeof postgres> | null = null;
+
+function getSqlClient(databaseUrl: string) {
+  if (!sqlClient) {
+    sqlClient = postgres(databaseUrl, {
+      prepare: false,
+      ssl: "require",
+    });
+  }
+  return sqlClient;
+}
+
+// Nama fungsi dipertahankan sebagai queryNeon demi meminimalkan perubahan di file lain
 async function queryNeon(
   databaseUrl: string,
   sql: string,
   params: unknown[] = []
 ): Promise<{ rows: Record<string, unknown>[] }> {
-  const parsed = new URL(databaseUrl.replace(/^postgres(ql)?:\/\//, "https://"));
-  const endpoint = `https://${parsed.hostname}/sql`;
-
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Neon-Connection-String": databaseUrl,
-    },
-    body: JSON.stringify({ query: sql, params }),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Neon query failed: ${response.status} - ${text}`);
-  }
-
-  return response.json() as Promise<{ rows: Record<string, unknown>[] }>;
+  const client = getSqlClient(databaseUrl);
+  // postgres-js mengembalikan array objek, kita bungkus dalam format { rows }
+  const result = await client.unsafe(sql, params as any[]);
+  return { rows: result };
 }
 
 // ─── Template Engine ──────────────────────────────────────────────────────────

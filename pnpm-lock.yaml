@@ -123,6 +123,10 @@ importers:
         version: 5.9.3
 
   apps/worker:
+    dependencies:
+      postgres:
+        specifier: ^3.4.9
+        version: 3.4.9
     devDependencies:
       '@cloudflare/workers-types':
         specifier: 4.20260508.1
@@ -141,7 +145,10 @@ importers:
         version: 0.10.4
       drizzle-orm:
         specifier: ^0.39.3
-        version: 0.39.3(@cloudflare/workers-types@4.20260508.1)(@neondatabase/serverless@0.10.4)(@types/pg@8.11.6)
+        version: 0.39.3(@cloudflare/workers-types@4.20260508.1)(@neondatabase/serverless@0.10.4)(@types/pg@8.11.6)(postgres@3.4.9)
+      postgres:
+        specifier: ^3.4.9
+        version: 3.4.9
     devDependencies:
       dotenv:
         specifier: ^16.4.7
@@ -3627,6 +3634,10 @@ packages:
   postgres-range@1.1.4:
     resolution: {integrity: sha512-i/hbxIE9803Alj/6ytL7UHQxRvZkI9O4Sy+J3HGc4F4oo/2eQAjTSNJ0bfxyse3bH0nuVesCk+3IRLaMtG3H6w==}
 
+  postgres@3.4.9:
+    resolution: {integrity: sha512-GD3qdB0x1z9xgFI6cdRD6xu2Sp2WCOEoe3mtnyB5Ee0XrrL5Pe+e4CCnJrRMnL1zYtRDZmQQVbvOttLnKDLnaw==}
+    engines: {node: '>=12'}
+
   powershell-utils@0.1.0:
     resolution: {integrity: sha512-dM0jVuXJPsDN6DvRpea484tCUaMiXWjuCn++HGTqUWzGDjv5tZkEZldAJ/UMlqRYGFrD/etByo4/xOuC/snX2A==}
     engines: {node: '>=20'}
@@ -6040,11 +6051,12 @@ snapshots:
       esbuild: 0.25.12
       tsx: 4.21.0
 
-  drizzle-orm@0.39.3(@cloudflare/workers-types@4.20260508.1)(@neondatabase/serverless@0.10.4)(@types/pg@8.11.6):
+  drizzle-orm@0.39.3(@cloudflare/workers-types@4.20260508.1)(@neondatabase/serverless@0.10.4)(@types/pg@8.11.6)(postgres@3.4.9):
     optionalDependencies:
       '@cloudflare/workers-types': 4.20260508.1
       '@neondatabase/serverless': 0.10.4
       '@types/pg': 8.11.6
+      postgres: 3.4.9
 
   dunder-proto@1.0.1:
     dependencies:
@@ -7515,6 +7527,8 @@ snapshots:
   postgres-interval@3.0.0: {}
 
   postgres-range@1.1.4: {}
+
+  postgres@3.4.9: {}
 
   powershell-utils@0.1.0: {}
 

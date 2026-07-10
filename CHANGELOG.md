@@ -18,6 +18,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## v0.1.6 — 2026-07-10
+
+### Changed
+- **Database Driver Migration** — Migrated database driver from `@neondatabase/serverless` (Neon-only HTTP) to `postgres` (`postgres-js`) across the monorepo, enabling connection to any PostgreSQL provider (e.g. Supabase, Neon, RDS, or local VM).
+- **Transaction Pooler Compatibility** — Configured database connections with `prepare: false` by default, preventing prepared statement conflicts when using connection poolers like PgBouncer or Supabase Transaction Pooler.
+- **Cloudflare Worker Database TCP Support** — Upgraded the Worker evaluator database query engine from Neon HTTP `/sql` REST endpoint to direct TCP/SSL connection via `postgres-js`, enabled by adding `nodejs_compat` flag to `wrangler.toml` and handling TS query parameter type-casting.
+
+---
+
 ## v0.1.5 — 2026-05-17
 
 ### Added

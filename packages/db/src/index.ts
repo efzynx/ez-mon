@@ -1,12 +1,14 @@
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
+import postgres from "postgres";
+import { drizzle } from "drizzle-orm/postgres-js";
 import * as schema from "./schema/index";
 
-// Serverless-safe: creates a new HTTP connection per invocation
-// This is the recommended pattern for Vercel serverless functions
+// Serverless-safe & pooler-safe: uses postgres-js driver
+// Disables prepared statements (prepare: false) for compatibility with transaction poolers like Supabase/PgBouncer
 export function createDb(databaseUrl: string) {
-  const sql = neon(databaseUrl);
-  return drizzle({ client: sql, schema });
+  const client = postgres(databaseUrl, {
+    prepare: false,
+  });
+  return drizzle(client, { schema });
 }
 
 // Convenience: create db from environment variable
@@ -23,3 +25,4 @@ export type Database = ReturnType<typeof createDb>;
 // Re-export schema and drizzle utilities
 export * from "./schema/index";
 export { eq, and, or, gt, lt, gte, lte, desc, asc, sql, count, avg, max, min, sum } from "drizzle-orm";
+
