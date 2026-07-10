@@ -16,12 +16,13 @@ export default auth((req) => {
     nextUrl.pathname.startsWith("/register");
   const isApiAuth = nextUrl.pathname.startsWith("/api/auth");
   const isAgentApi = nextUrl.pathname.startsWith("/api/agent");
+  const isInternalApi = nextUrl.pathname.startsWith("/api/internal");
   const isStatusPage = nextUrl.pathname.startsWith("/status");
   const isPublicPage = nextUrl.pathname === "/";
   const isInstaller = nextUrl.pathname === "/install.sh";
 
   // Rute publik — bypass auth
-  if (isApiAuth || isAgentApi || isStatusPage || isPublicPage || isInstaller) {
+  if (isApiAuth || isAgentApi || isInternalApi || isStatusPage || isPublicPage || isInstaller) {
     return NextResponse.next();
   }
 
@@ -40,6 +41,6 @@ export default auth((req) => {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|install\\.sh|api/agent).*)",
+    "/((?!_next/static|_next/image|favicon.ico|install\\.sh|api/agent|api/internal).*)",
   ],
 };
