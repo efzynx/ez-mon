@@ -123,10 +123,6 @@ importers:
         version: 5.9.3
 
   apps/worker:
-    dependencies:
-      postgres:
-        specifier: ^3.4.9
-        version: 3.4.9
     devDependencies:
       '@cloudflare/workers-types':
         specifier: 4.20260508.1
