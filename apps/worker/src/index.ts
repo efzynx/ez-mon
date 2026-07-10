@@ -74,6 +74,9 @@ function getSqlClient(databaseUrl: string) {
     sqlClient = postgres(databaseUrl, {
       prepare: false,
       ssl: "require",
+      max: 1,
+      idle_timeout: 10,
+      connect_timeout: 5,
     });
   }
   return sqlClient;
