@@ -64,32 +64,32 @@ interface MonitorRow {
   project_name?: string;
 }
 
-// ─── Database Query Helper (Universal Postgres - Stateless) ───────────────────
-import postgres from "postgres";
+// ─── Database Query Helper (Universal Postgres - Single Connection) ───────────
+import postgres, { type Sql } from "postgres";
 
-// Nama fungsi dipertahankan sebagai queryNeon demi meminimalkan perubahan di file lain.
-// Menggunakan inisialisasi lokal dan client.end() di blok finally agar tidak menyisakan
-// background reconnect loop socket di Cloudflare Workers.
-async function queryNeon(
-  databaseUrl: string,
-  sql: string,
-  params: unknown[] = []
-): Promise<{ rows: Record<string, unknown>[] }> {
-  const client = postgres(databaseUrl, {
+/** Buat satu koneksi TCP ke database. Harus ditutup via client.end() di akhir handler. */
+function createClient(databaseUrl: string): Sql {
+  return postgres(databaseUrl, {
     prepare: false,
     ssl: "require",
     max: 1,
-    connect_timeout: 5,
+    idle_timeout: 20,
+    connect_timeout: 10,
   });
+}
 
-  try {
-    // postgres-js mengembalikan array objek, kita bungkus dalam format { rows }
-    const result = await client.unsafe(sql, params as any[]);
-    return { rows: result };
-  } finally {
-    // Tutup koneksi secara eksplisit agar semua TCP sockets dibersihkan dan loop reconnect dihentikan
-    await client.end({ timeout: 2 });
-  }
+/**
+ * queryNeon: Eksekusi raw SQL via client yang sudah terhubung.
+ * Client TIDAK dibuat/ditutup di sini — lifecycle dikelola oleh handler pemanggil.
+ * Nama fungsi dipertahankan demi meminimalkan perubahan.
+ */
+async function queryNeon(
+  client: Sql,
+  sql: string,
+  params: unknown[] = []
+): Promise<{ rows: Record<string, unknown>[] }> {
+  const result = await client.unsafe(sql, params as any[]);
+  return { rows: result };
 }
 
 // ─── Template Engine ──────────────────────────────────────────────────────────
@@ -278,7 +278,7 @@ async function sendWebhook(
  * Untuk Telegram: plain text / Markdown template.
  */
 async function dispatchNotifications(
-  databaseUrl: string,
+  client: Sql,
   projectId: string,
   incidentId: string,
   message: string,
@@ -288,7 +288,7 @@ async function dispatchNotifications(
 ): Promise<void> {
   // Ambil semua channel yang aktif untuk project ini
   const channelsResult = await queryNeon(
-    databaseUrl,
+    client,
     `SELECT id, type, name, config_json, enabled, notify_on
      FROM notification_channels
      WHERE project_id = $1 AND enabled = true`,
@@ -415,7 +415,7 @@ async function dispatchNotifications(
     // Neon timeout tidak crash loop dan channel berikutnya tetap diproses
     try {
       await queryNeon(
-        databaseUrl,
+        client,
         `INSERT INTO alert_events (id, incident_id, channel_id, status, sent_at, created_at)
          VALUES (gen_random_uuid(), $1, $2, $3, $4, NOW())`,
         [
@@ -612,10 +612,10 @@ async function runKeywordCheck(
  * - Batch update nextCheckAt = NOW() + interval_sec untuk semua monitor yang diproses
  * - Retention check_results dilakukan di Step 5 (30 hari)
  */
-async function runCloudChecks(databaseUrl: string): Promise<void> {
+async function runCloudChecks(client: Sql): Promise<void> {
   // Ambil monitor aktif yang sudah waktunya dicek — max 50 per run untuk safety
   const result = await queryNeon(
-    databaseUrl,
+    client,
     `SELECT cm.id, cm.project_id, cm.name, cm.url, cm.type, cm.interval_sec, cm.timeout_sec, cm.keyword, cm.expected_status, cm.last_status, p.name as project_name
      FROM cloud_monitors cm
      JOIN projects p ON cm.project_id = p.id
@@ -658,7 +658,7 @@ async function runCloudChecks(databaseUrl: string): Promise<void> {
 
     // Simpan hasil check ke cloud_check_results
     await queryNeon(
-      databaseUrl,
+      client,
       `INSERT INTO cloud_check_results
          (id, monitor_id, status, http_status, latency_ms, error, keyword_found, tls_days_remaining, checked_at)
        VALUES
@@ -683,7 +683,7 @@ async function runCloudChecks(databaseUrl: string): Promise<void> {
       : null;
 
     const updateRes = await queryNeon(
-      databaseUrl,
+      client,
       `UPDATE cloud_monitors
        SET last_status = $1,
            last_checked_at = NOW(),
@@ -731,7 +731,7 @@ async function runCloudChecks(databaseUrl: string): Promise<void> {
       // Buat/resolve incident sederhana untuk cloud monitor
       // Cek apakah ada open incident untuk monitor ini
       const existingIncidentRes = await queryNeon(
-        databaseUrl,
+        client,
         `SELECT id FROM incidents
          WHERE agent_id IS NULL
            AND project_id = $1
@@ -748,7 +748,7 @@ async function runCloudChecks(databaseUrl: string): Promise<void> {
         if (existingIncidentRes.rows.length === 0) {
           // Buka incident baru
           const incRes = await queryNeon(
-            databaseUrl,
+            client,
             `INSERT INTO incidents (id, project_id, agent_id, type, status, started_at, created_at, metadata)
              VALUES (gen_random_uuid(), $1, NULL, 'monitor_down', 'open', NOW(), NOW(), cast($2 as jsonb))
              RETURNING id`,
@@ -765,7 +765,7 @@ async function runCloudChecks(databaseUrl: string): Promise<void> {
         if (existingIncidentRes.rows.length > 0) {
           incidentId = (existingIncidentRes.rows[0] as { id: string }).id;
           await queryNeon(
-            databaseUrl,
+            client,
             `UPDATE incidents SET status = 'resolved', resolved_at = NOW() WHERE id = $1`,
             [incidentId]
           );
@@ -773,7 +773,7 @@ async function runCloudChecks(databaseUrl: string): Promise<void> {
         } else {
           // Tidak ada incident open, buat placeholder untuk alert_event
           const incRes = await queryNeon(
-            databaseUrl,
+            client,
             `INSERT INTO incidents (id, project_id, agent_id, type, status, started_at, resolved_at, created_at, metadata)
              VALUES (gen_random_uuid(), $1, NULL, 'monitor_down', 'resolved', NOW(), NOW(), NOW(), cast($2 as jsonb))
              RETURNING id`,
@@ -786,7 +786,7 @@ async function runCloudChecks(databaseUrl: string): Promise<void> {
       // Dispatch ke semua channel notifikasi project
       try {
         await dispatchNotifications(
-          databaseUrl,
+          client,
           monitor.project_id,
           incidentId,
           message,
@@ -827,42 +827,43 @@ const worker = {
     // ── /debug — lihat state DB dan test notifikasi ──────────────────────────
     if (url.pathname === "/debug" && request.method === "GET") {
       const report: Record<string, unknown> = { ts: new Date().toISOString() };
+      const client = createClient(env.DATABASE_URL);
       try {
         // 1. Semua agents
-        const agentsRes = await queryNeon(env.DATABASE_URL,
+        const agentsRes = await queryNeon(client,
           `SELECT id, name, status, last_seen_at, offline_deadline_at,
                   (offline_deadline_at < NOW()) as deadline_passed
            FROM agents ORDER BY last_seen_at DESC LIMIT 20`);
         report.agents = agentsRes.rows;
 
         // 2. Semua overdue (yang harusnya terdeteksi evaluator)
-        const overdueRes = await queryNeon(env.DATABASE_URL,
+        const overdueRes = await queryNeon(client,
           `SELECT id, name, status, offline_deadline_at FROM agents
            WHERE status != 'offline' AND offline_deadline_at IS NOT NULL AND offline_deadline_at < NOW()`);
         report.overdue_agents = overdueRes.rows;
 
         // 3. Channels
-        const channelsRes = await queryNeon(env.DATABASE_URL,
+        const channelsRes = await queryNeon(client,
           `SELECT id, project_id, type, name, enabled, config_json FROM notification_channels`);
         report.channels = channelsRes.rows;
 
         // 4. Recent incidents
-        const incRes = await queryNeon(env.DATABASE_URL,
+        const incRes = await queryNeon(client,
           `SELECT id, agent_id, type, status, started_at FROM incidents ORDER BY started_at DESC LIMIT 10`);
         report.recent_incidents = incRes.rows;
 
         // 5. Check actual columns in alert_events table
-        const colRes = await queryNeon(env.DATABASE_URL,
+        const colRes = await queryNeon(client,
           `SELECT column_name, data_type FROM information_schema.columns
            WHERE table_name = 'alert_events' ORDER BY ordinal_position`);
         report.alert_events_columns = colRes.rows;
 
         // 6. Recent alert_events (safe)
-        const evRes = await queryNeon(env.DATABASE_URL, `SELECT * FROM alert_events LIMIT 10`);
+        const evRes = await queryNeon(client, `SELECT * FROM alert_events LIMIT 10`);
         report.recent_alert_events = evRes.rows;
 
         // 7. Cloud monitors state
-        const monitorsRes = await queryNeon(env.DATABASE_URL,
+        const monitorsRes = await queryNeon(client,
           `SELECT id, name, url, last_status, next_check_at, status,
                   (next_check_at <= NOW()) as due_now,
                   next_check_at - NOW() as time_until_check
@@ -873,6 +874,8 @@ const worker = {
       } catch (e) {
         report.db_error = String(e);
         report.db_ok = false;
+      } finally {
+        await client.end({ timeout: 3 });
       }
       return new Response(JSON.stringify(report, null, 2), {
         status: 200,
@@ -894,8 +897,9 @@ const worker = {
 
     // ── /reset-monitors — paksa semua monitor agar diproses di /trigger berikutnya ─
     if (url.pathname === "/reset-monitors" && request.method === "POST") {
+      const client = createClient(env.DATABASE_URL);
       try {
-        const res = await queryNeon(env.DATABASE_URL,
+        const res = await queryNeon(client,
           `UPDATE cloud_monitors
            SET next_check_at = NOW(),
                last_status = 'unknown'
@@ -907,6 +911,8 @@ const worker = {
         );
       } catch (e) {
         return new Response(JSON.stringify({ error: String(e) }), { status: 500 });
+      } finally {
+        await client.end({ timeout: 3 });
       }
     }
 
@@ -919,11 +925,12 @@ const worker = {
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     console.log("[evaluator] Cron triggered at", new Date().toISOString());
 
+    const client = createClient(env.DATABASE_URL);
     try {
       // ── STEP 1: Detect & handle overdue (online/unknown → offline) ──────────
 
       const overdueResult = await queryNeon(
-        env.DATABASE_URL,
+        client,
         `SELECT agents.id, agents.project_id, agents.name, agents.status, agents.offline_deadline_at, projects.name as project_name
          FROM agents
          JOIN projects ON agents.project_id = projects.id
@@ -939,14 +946,14 @@ const worker = {
       for (const agent of overdueAgents) {
         // Mark agent offline
         await queryNeon(
-          env.DATABASE_URL,
+          client,
           `UPDATE agents SET status = 'offline', updated_at = NOW() WHERE id = $1`,
           [agent.id]
         );
 
         // Anti-spam: hanya buat incident baru jika belum ada yang open
         const existingIncident = await queryNeon(
-          env.DATABASE_URL,
+          client,
           `SELECT id FROM incidents
            WHERE agent_id = $1 AND type = 'heartbeat_missed' AND status = 'open'
            LIMIT 1`,
@@ -956,7 +963,7 @@ const worker = {
         if (existingIncident.rows.length === 0) {
           // Buat incident baru
           const incidentResult = await queryNeon(
-            env.DATABASE_URL,
+            client,
             `INSERT INTO incidents (id, project_id, agent_id, type, status, message, started_at)
              VALUES (gen_random_uuid(), $1, $2, 'heartbeat_missed', 'open', $3, NOW())
              RETURNING id`,
@@ -973,7 +980,7 @@ const worker = {
           // Dispatch notifikasi offline ke semua channel aktif
           if (incidentId) {
             const msg = `🔴 *EZMON Alert*\nAgent *${agent.name}* is OFFLINE\nMissed heartbeat deadline at ${agent.offline_deadline_at}`;
-            await dispatchNotifications(env.DATABASE_URL, agent.project_id, incidentId, msg, "offline", "agent", {
+            await dispatchNotifications(client, agent.project_id, incidentId, msg, "offline", "agent", {
               project: agent.project_name || "Unknown Project",
               agentOrMonitor: agent.name,
               status: "OFFLINE",
@@ -989,7 +996,7 @@ const worker = {
       // ── STEP 2: Detect & handle recovered (offline → online) ────────────────
 
       const recoveredResult = await queryNeon(
-        env.DATABASE_URL,
+        client,
         `SELECT agents.id, agents.project_id, agents.name, agents.status, projects.name as project_name
          FROM agents
          JOIN projects ON agents.project_id = projects.id
@@ -1004,14 +1011,14 @@ const worker = {
 
       for (const agent of recoveredAgents) {
         await queryNeon(
-          env.DATABASE_URL,
+          client,
           `UPDATE agents SET status = 'online', updated_at = NOW() WHERE id = $1`,
           [agent.id]
         );
 
         // Resolve semua open incidents untuk agent ini
         const resolvedIncidents = await queryNeon(
-          env.DATABASE_URL,
+          client,
           `UPDATE incidents
            SET status = 'resolved', resolved_at = NOW()
            WHERE agent_id = $1 AND type = 'heartbeat_missed' AND status = 'open'
@@ -1026,7 +1033,7 @@ const worker = {
           const incidentId = row.id as string;
           const projectId = row.project_id as string;
           const msg = `🟢 *EZMON Recovery*\nAgent *${agent.name}* is back ONLINE`;
-          await dispatchNotifications(env.DATABASE_URL, projectId, incidentId, msg, "online", "agent", {
+          await dispatchNotifications(client, projectId, incidentId, msg, "online", "agent", {
             project: agent.project_name || "Unknown Project",
             agentOrMonitor: agent.name,
             status: "ONLINE",
@@ -1039,7 +1046,7 @@ const worker = {
       // ── STEP 3: Retention Cleanup — metric_buckets (7 hari) ─────────────────
       try {
         await queryNeon(
-          env.DATABASE_URL,
+          client,
           `DELETE FROM metric_buckets WHERE bucket_start < NOW() - INTERVAL '7 days'`
         );
         console.log(`[evaluator] Retention cleanup metric_buckets complete (7 days)`);
@@ -1049,7 +1056,7 @@ const worker = {
 
       // ── STEP 4: Cloud Monitor Checks (Phase 5) ────────────────────────────────
       try {
-        await runCloudChecks(env.DATABASE_URL);
+        await runCloudChecks(client);
         console.log(`[evaluator] Cloud checks complete`);
       } catch (e) {
         console.error("[evaluator] Cloud checks error:", e);
@@ -1058,7 +1065,7 @@ const worker = {
       // ── STEP 5: Retention Cleanup — cloud_check_results (30 hari) ────────────
       try {
         await queryNeon(
-          env.DATABASE_URL,
+          client,
           `DELETE FROM cloud_check_results WHERE checked_at < NOW() - INTERVAL '30 days'`
         );
         console.log(`[evaluator] Retention cleanup cloud_check_results complete (30 days)`);
@@ -1070,7 +1077,7 @@ const worker = {
       // alert_events adalah audit log pengiriman notifikasi. 7 hari cukup untuk debug.
       try {
         await queryNeon(
-          env.DATABASE_URL,
+          client,
           `DELETE FROM alert_events WHERE created_at < NOW() - INTERVAL '7 days'`
         );
         console.log(`[evaluator] Retention cleanup alert_events complete (7 days)`);
@@ -1081,6 +1088,8 @@ const worker = {
       console.log("[evaluator] Evaluation complete");
     } catch (error) {
       console.error("[evaluator] Error:", error);
+    } finally {
+      await client.end({ timeout: 3 });
     }
   },
 };
