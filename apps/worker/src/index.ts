@@ -64,34 +64,32 @@ interface MonitorRow {
   project_name?: string;
 }
 
-// ─── Database Query Helper (Universal Postgres) ───────────────────────────────
+// ─── Database Query Helper (Universal Postgres - Stateless) ───────────────────
 import postgres from "postgres";
 
-let sqlClient: ReturnType<typeof postgres> | null = null;
-
-function getSqlClient(databaseUrl: string) {
-  if (!sqlClient) {
-    sqlClient = postgres(databaseUrl, {
-      prepare: false,
-      ssl: "require",
-      max: 1,
-      idle_timeout: 10,
-      connect_timeout: 5,
-    });
-  }
-  return sqlClient;
-}
-
-// Nama fungsi dipertahankan sebagai queryNeon demi meminimalkan perubahan di file lain
+// Nama fungsi dipertahankan sebagai queryNeon demi meminimalkan perubahan di file lain.
+// Menggunakan inisialisasi lokal dan client.end() di blok finally agar tidak menyisakan
+// background reconnect loop socket di Cloudflare Workers.
 async function queryNeon(
   databaseUrl: string,
   sql: string,
   params: unknown[] = []
 ): Promise<{ rows: Record<string, unknown>[] }> {
-  const client = getSqlClient(databaseUrl);
-  // postgres-js mengembalikan array objek, kita bungkus dalam format { rows }
-  const result = await client.unsafe(sql, params as any[]);
-  return { rows: result };
+  const client = postgres(databaseUrl, {
+    prepare: false,
+    ssl: "require",
+    max: 1,
+    connect_timeout: 5,
+  });
+
+  try {
+    // postgres-js mengembalikan array objek, kita bungkus dalam format { rows }
+    const result = await client.unsafe(sql, params as any[]);
+    return { rows: result };
+  } finally {
+    // Tutup koneksi secara eksplisit agar semua TCP sockets dibersihkan dan loop reconnect dihentikan
+    await client.end({ timeout: 2 });
+  }
 }
 
 // ─── Template Engine ──────────────────────────────────────────────────────────
