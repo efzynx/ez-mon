@@ -24,6 +24,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Dedicated Public Status API Endpoint** — Added `GET /api/public/status/[slug]` returning JSON representation of published status pages with CORS support for third-party websites and integrations.
 
 ### Fixed
+- **Public API Auth Bypass** — Added `/api/public` to middleware (`proxy.ts`) public route bypass and matcher exclusions so unauthenticated requests to `/api/public/status/[slug]` are served directly without redirecting to `/login`.
 - **Agent Detail Loading Error** — Fixed "Agent not found" error in new workspaces/projects by reading active project ID from localStorage instead of hardcoding index 0.
 - **Metrics Ingestion HTTP 500 Error** — Fixed HTTP 500 error when using Supabase/pgBouncer transaction poolers by refactoring PostgreSQL shorthand casts (`::json` and `::jsonb`) to standard ANSI SQL casts (`cast(... as json)` and `cast(... as jsonb)`).
 - **Metrics Ingestion Date Crash** — Fixed `TypeError: Received an instance of Date` by converting `bucketStart` Date object to ISO string representation before database query.
