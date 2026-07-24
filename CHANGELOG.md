@@ -18,6 +18,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## v0.1.7 — 2026-07-24
+
+### Added
+- **Dedicated Public Status API Endpoint** — Added `GET /api/public/status/[slug]` returning JSON representation of published status pages with CORS support for third-party websites and integrations.
+
+### Fixed
+- **Agent Detail Loading Error** — Fixed "Agent not found" error in new workspaces/projects by reading active project ID from localStorage instead of hardcoding index 0.
+- **Metrics Ingestion HTTP 500 Error** — Fixed HTTP 500 error when using Supabase/pgBouncer transaction poolers by refactoring PostgreSQL shorthand casts (`::json` and `::jsonb`) to standard ANSI SQL casts (`cast(... as json)` and `cast(... as jsonb)`).
+- **Metrics Ingestion Date Crash** — Fixed `TypeError: Received an instance of Date` by converting `bucketStart` Date object to ISO string representation before database query.
+- **Cloudflare Worker Subrequests Limit** — Replaced `postgres-js` TCP driver in Worker with HTTP proxy approach (`POST /api/internal/query`), reducing subrequests to 1 per query and eliminating the 'Too many subrequests' error.
+
+---
+
 ## v0.1.6 — 2026-07-10
 
 ### Changed
