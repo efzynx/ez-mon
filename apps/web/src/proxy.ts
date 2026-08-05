@@ -22,8 +22,11 @@ export default auth((req) => {
   const isPublicPage = nextUrl.pathname === "/";
   const isInstaller = nextUrl.pathname === "/install.sh";
 
+  const isForgotPassword = nextUrl.pathname.startsWith("/forgot-password");
+  const isResetPassword = nextUrl.pathname.startsWith("/reset-password");
+
   // Rute publik — bypass auth
-  if (isApiAuth || isAgentApi || isInternalApi || isPublicApi || isStatusPage || isPublicPage || isInstaller) {
+  if (isApiAuth || isAgentApi || isInternalApi || isPublicApi || isStatusPage || isPublicPage || isInstaller || isForgotPassword || isResetPassword) {
     return NextResponse.next();
   }
 
