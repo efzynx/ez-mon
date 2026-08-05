@@ -43,17 +43,26 @@ export async function POST(request: NextRequest) {
 
   // ── Execute query ─────────────────────────────────────────────────────────
   try {
-    // Gunakan db().execute() dengan sql.raw() untuk query mentah
-    // Kita perlu membangun query dengan parameter binding yang aman
     const result = await db().execute(
       sql.raw(buildParameterizedQuery(body.sql, params))
     );
 
-    // Drizzle execute() mengembalikan array — wrap sebagai { rows }
-    const rows = Array.isArray(result) ? result : [];
+    // postgres-js driver dapat mengembalikan:
+    // - RowList (array-like) untuk SELECT / RETURNING
+    // - CommandResult untuk UPDATE/DELETE tanpa RETURNING
+    // Drizzle wraps hasilnya — periksa keduanya.
+    let rows: unknown[];
+    if (Array.isArray(result)) {
+      rows = result as unknown[];
+    } else if (result && typeof result === "object" && "rows" in result && Array.isArray((result as { rows: unknown[] }).rows)) {
+      rows = (result as { rows: unknown[] }).rows;
+    } else {
+      rows = [];
+    }
+
     return NextResponse.json({ rows });
   } catch (e) {
-    console.error("[internal/query] Query execution error:", e);
+    console.error("[internal/query] Query execution error:", String(e));
     return NextResponse.json(
       { error: `Query failed: ${String(e)}` },
       { status: 500 }

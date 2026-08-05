@@ -11,9 +11,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 -
 
 ### Changed
--
+### Changed
+- **Worker Hub API Query Format** — Simplified `UPDATE` query format for cloud_monitors to no longer rely on complex `RETURNING` subqueries, making it more resilient to result extraction inconsistencies.
 
 ### Fixed
+- **Cloud Monitors stuck in pending state** — Fixed `last_checked_at` and `next_check_at` not updating for cloud monitors. The Drizzle postgres-js driver wraps `QueryResult` arrays in an object, which was failing `Array.isArray()` checks in the `/api/internal/query` Hub route. The route now correctly extracts rows from both `RowList` arrays and wrapped objects.
 -
 
 ---
