@@ -632,81 +632,123 @@ async function runCloudChecks(env: Env): Promise<void> {
   if (monitors.length === 0) return;
   console.log(`[cloud] Found ${monitors.length} monitors due for check`);
 
-  // Jalankan semua check secara paralel untuk efisiensi waktu
-  const checkPromises = monitors.map(async (monitor) => {
-    let checkResult: CheckResult;
-
-    try {
-      if (monitor.type === "tls") {
-        checkResult = await runTlsCheck(monitor.url, monitor.timeout_sec);
-      } else if (monitor.type === "keyword" && monitor.keyword) {
-        checkResult = await runKeywordCheck(monitor.url, monitor.keyword, monitor.timeout_sec);
-      } else {
-        // Default: HTTP check
-        checkResult = await runHttpCheck(monitor.url, monitor.expected_status, monitor.timeout_sec);
+  // Jalankan semua check secara paralel (HTTP fetches)
+  // CheckResult fetches use 1 subrequest each. Max 50 monitors = 50 subrequests.
+  // We need to keep it under the Cloudflare limit.
+  const checkResults = await Promise.allSettled(
+    monitors.map(async (monitor) => {
+      let checkResult: CheckResult;
+      try {
+        if (monitor.type === "tls") {
+          checkResult = await runTlsCheck(monitor.url, monitor.timeout_sec);
+        } else if (monitor.type === "keyword" && monitor.keyword) {
+          checkResult = await runKeywordCheck(monitor.url, monitor.keyword, monitor.timeout_sec);
+        } else {
+          checkResult = await runHttpCheck(monitor.url, monitor.expected_status || 200, monitor.timeout_sec);
+        }
+      } catch (e) {
+        checkResult = {
+          status: "down",
+          httpStatus: null,
+          latencyMs: null,
+          error: `Unhandled error: ${String(e)}`,
+          keywordFound: null,
+          tlsDaysRemaining: null,
+        };
       }
-    } catch (e) {
-      checkResult = {
-        status: "down",
-        httpStatus: null,
-        latencyMs: null,
-        error: `Unhandled error: ${String(e)}`,
-        keywordFound: null,
-        tlsDaysRemaining: null,
-      };
-    }
+      console.log(`[cloud] Monitor "${monitor.name}" → ${checkResult.status} (${checkResult.latencyMs}ms)`);
+      return { monitor, checkResult };
+    })
+  );
 
-    console.log(`[cloud] Monitor "${monitor.name}" → ${checkResult.status} (${checkResult.latencyMs}ms)`);
+  const successfulChecks = checkResults
+    .filter((r): r is PromiseFulfilledResult<{ monitor: MonitorRow; checkResult: CheckResult }> => r.status === "fulfilled")
+    .map(r => r.value);
 
-    // Simpan hasil check ke cloud_check_results
+  if (successfulChecks.length === 0) return;
+
+  // ── BATCH INSERT ──────────────────────────────────────────────────────────
+  // Menggabungkan semua insert ke dalam satu query untuk menghemat subrequests
+  const insertParams: unknown[] = [];
+  const insertValues: string[] = [];
+  
+  successfulChecks.forEach(({ monitor, checkResult }, idx) => {
+    const offset = idx * 7;
+    insertValues.push(`(gen_random_uuid(), $${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, NOW())`);
+    insertParams.push(
+      monitor.id,
+      checkResult.status,
+      checkResult.httpStatus,
+      checkResult.latencyMs,
+      checkResult.error,
+      checkResult.keywordFound,
+      checkResult.tlsDaysRemaining
+    );
+  });
+
+  try {
     await queryNeon(
       env,
       `INSERT INTO cloud_check_results
          (id, monitor_id, status, http_status, latency_ms, error, keyword_found, tls_days_remaining, checked_at)
-       VALUES
-         (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, NOW())`,
-      [
-        monitor.id,
-        checkResult.status,
-        checkResult.httpStatus,
-        checkResult.latencyMs,
-        checkResult.error,
-        checkResult.keywordFound,
-        checkResult.tlsDaysRemaining,
-      ]
+       VALUES ${insertValues.join(", ")}`,
+      insertParams
     );
+  } catch (e) {
+    console.error("[cloud] Batch INSERT failed:", e);
+  }
 
-    // Update cloud_monitors secara ATOMIC dan ambil last_status sebelumnya.
-    // Menggunakan RETURNING untuk mencegah race condition antara dua cron run:
-    // hanya satu UPDATE yang akan mengembalikan baris jika status benar-benar berubah.
+  // ── BATCH UPDATE ──────────────────────────────────────────────────────────
+  const updateParams: unknown[] = [];
+  const updateValues: string[] = [];
+  
+  successfulChecks.forEach(({ monitor, checkResult }, idx) => {
+    const offset = idx * 5;
     const nextCheckAt = new Date(Date.now() + monitor.interval_sec * 1000).toISOString();
     const tlsExpiresAt = checkResult.tlsDaysRemaining !== null
       ? new Date(Date.now() + checkResult.tlsDaysRemaining * 86400000).toISOString()
       : null;
-
-    const updateRes = await queryNeon(
-      env,
-      `UPDATE cloud_monitors
-       SET last_status = $1,
-           last_checked_at = NOW(),
-           last_latency_ms = $2,
-           next_check_at = $3,
-           tls_expires_at = COALESCE($4::timestamptz, tls_expires_at),
-           updated_at = NOW()
-       WHERE id = $5
-       RETURNING (SELECT last_status FROM cloud_monitors WHERE id = $5) AS prev_status`,
-      [
-        checkResult.status,
-        checkResult.latencyMs,
-        nextCheckAt,
-        tlsExpiresAt,
-        monitor.id,
-      ]
+      
+    updateValues.push(`($${offset + 1}::uuid, $${offset + 2}::text, $${offset + 3}::int, $${offset + 4}::timestamptz, $${offset + 5}::timestamptz)`);
+    updateParams.push(
+      monitor.id,
+      checkResult.status,
+      checkResult.latencyMs,
+      nextCheckAt,
+      tlsExpiresAt
     );
+  });
 
-    // ── Deteksi transisi status dan kirim notifikasi ─────────────────────────
-    // Gunakan prev_status dari RETURNING — lebih akurat dan race-condition safe
-    const prevStatus = (updateRes.rows[0] as { prev_status?: string } | undefined)?.prev_status ?? monitor.last_status;
+  // Kami mengupdate tabel cloud_monitors dan mengambil kembali status lamanya
+  let updateRes: { rows: any[] } = { rows: [] };
+  try {
+    updateRes = await queryNeon(
+      env,
+      `UPDATE cloud_monitors AS c
+       SET last_status = v.last_status,
+           last_checked_at = NOW(),
+           last_latency_ms = v.last_latency_ms,
+           next_check_at = v.next_check_at,
+           tls_expires_at = COALESCE(v.tls_expires_at, c.tls_expires_at),
+           updated_at = NOW()
+       FROM (VALUES ${updateValues.join(", ")}) AS v(id, last_status, last_latency_ms, next_check_at, tls_expires_at)
+       WHERE c.id = v.id
+       RETURNING c.id, (SELECT last_status FROM cloud_monitors WHERE id = c.id) AS prev_status`,
+      updateParams
+    );
+  } catch (e) {
+    console.error("[cloud] Batch UPDATE failed:", e);
+  }
+
+  // Buat lookup untuk prev_status
+  const prevStatusMap = new Map<string, string>();
+  updateRes.rows.forEach((row: any) => {
+    if (row.id && row.prev_status) prevStatusMap.set(row.id, row.prev_status);
+  });
+
+  // ── DETEKSI TRANSISI ──────────────────────────────────────────────────────
+  for (const { monitor, checkResult } of successfulChecks) {
+    const prevStatus = prevStatusMap.get(monitor.id) ?? monitor.last_status;
     const newStatus = checkResult.status;
     const isTransition = (prevStatus !== "unknown" && prevStatus !== newStatus) || (prevStatus === "unknown" && newStatus === "down");
 
@@ -810,13 +852,6 @@ async function runCloudChecks(env: Env): Promise<void> {
         console.error(`[cloud] Notification dispatch failed for "${monitor.name}": ${e}`);
       }
     }
-  });
-
-  // Promise.allSettled → jangan biarkan satu monitor yang gagal membatalkan yang lain
-  const results = await Promise.allSettled(checkPromises);
-  const failed = results.filter(r => r.status === "rejected");
-  if (failed.length > 0) {
-    console.error(`[cloud] ${failed.length} monitor checks failed:`, failed);
   }
 }
 
