@@ -57,6 +57,7 @@ deploy.md
 .agents/
 
 # Test/scratch scripts
+tests/
 test-db.ts
 test-db.js
 apps/web/test-db.ts

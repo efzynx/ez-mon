@@ -1,8 +1,12 @@
 #!/bin/sh
 # EZMON Agent Installer
-# Usage: curl -fsSL <hub>/install.sh | EZMON_TOKEN=<token> sh
+# Usage:
+#   Interactive (Recommended, prevents token in history):
+#     curl -fsSL <hub>/install.sh | EZMON_SERVER_URL=<hub> sh
+#   One-liner (Automation):
+#     curl -fsSL <hub>/install.sh | EZMON_SERVER_URL=<hub> EZMON_TOKEN=<token> sh
 # Env vars:
-#   EZMON_TOKEN       — required, project token
+#   EZMON_TOKEN       — optional if running interactively, required for automation
 #   EZMON_SERVER_URL  — optional, default https://your-hub.vercel.app
 #   EZMON_AGENT_NAME  — optional, override agent name (default: hostname)
 set -e
@@ -20,7 +24,17 @@ printf "${BOLD}==========================================${RESET}\n"
 echo ""
 
 # ─── Validate environment ──────────────────────────────────────────────────────
-[ -z "$EZMON_TOKEN" ] && fatal "EZMON_TOKEN is required.\nUsage: curl -fsSL <url>/install.sh | EZMON_TOKEN=your_token sh"
+if [ -z "$EZMON_TOKEN" ]; then
+  if [ -c /dev/tty ] && ( : < /dev/tty ) 2>/dev/null; then
+    info "EZMON_TOKEN was not found in environment variables."
+    info "Prompting interactively to prevent token leakage in bash history..."
+    printf "${CYAN}[PROMPT]${RESET} Enter EZMON Project Token: "
+    read -r EZMON_TOKEN < /dev/tty
+    echo ""
+  fi
+fi
+
+[ -z "$EZMON_TOKEN" ] && fatal "EZMON_TOKEN is required.\nUsage:\n  Interactive (Secure): curl -fsSL <url>/install.sh | sh\n  Automation          : curl -fsSL <url>/install.sh | EZMON_TOKEN=your_token sh"
 
 SERVER_URL="${EZMON_SERVER_URL:-http://localhost:3000}"
 AGENT_NAME="${EZMON_AGENT_NAME:-$(hostname)}"
@@ -123,7 +137,7 @@ info "Registering agent with hub..."
 OS_NAME=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH_NAME=$(uname -m)
 
-AGENT_VERSION="${EZMON_AGENT_VERSION:-0.1.2-beta.2}"
+AGENT_VERSION="${EZMON_AGENT_VERSION:-0.1.8}"
 REG_RESPONSE=$(curl -s -X POST "$SERVER_URL/api/agent/register" \
   -H "Content-Type: application/json" \
   -d "{\"projectToken\":\"$EZMON_TOKEN\",\"hostname\":\"$(hostname)\",\"os\":\"$OS_NAME\",\"arch\":\"$ARCH_NAME\",\"version\":\"$AGENT_VERSION\",\"name\":\"$AGENT_NAME\"}" 2>&1)

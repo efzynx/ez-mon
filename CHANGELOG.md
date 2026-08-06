@@ -7,16 +7,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+---
+
+## v0.1.8 — 2026-08-07
+
 ### Added
--
+- **Security Validation Test Suite** — Integrated 14 Vitest unit tests in `@ezmon/shared` covering Zod input boundaries against SQL/NoSQL injection, SSRF, XSS, and metric buffer overflows.
+- **Install Script Integration Testing** — Created `install-security.test.sh` integration test script to verify POSIX `sh` syntax and interactive prompt execution paths.
+
+### Security
+- **Interactive Token Prompt in `install.sh`** — Refactored agent installation script to interactively prompt for `EZMON_TOKEN` via `/dev/tty` when not provided as an environment variable, preventing sensitive project tokens from being leaked in shell command history (`.bash_history`).
 
 ### Changed
-### Changed
-- **Worker Hub API Query Format** — Simplified `UPDATE` query format for cloud_monitors to no longer rely on complex `RETURNING` subqueries, making it more resilient to result extraction inconsistencies.
-
-### Fixed
-- **Cloud Monitors stuck in pending state** — Fixed `last_checked_at` and `next_check_at` not updating for cloud monitors. The Drizzle postgres-js driver wraps `QueryResult` arrays in an object, which was failing `Array.isArray()` checks in the `/api/internal/query` Hub route. The route now correctly extracts rows from both `RowList` arrays and wrapped objects.
--
+- **Dual-Mode Installation Selector UI** — Updated `InstallModal` component to provide a toggle between **Interactive (Secure)** mode (recommended for home labs and shared terminals) and **Direct (One-liner)** mode.
+- **TypeScript Workspace Definitions** — Added `@types/node` dependency and configuration to `@ezmon/db` for strict `process.env` type checking.
 
 ---
 

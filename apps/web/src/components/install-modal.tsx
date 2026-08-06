@@ -11,15 +11,18 @@ export function InstallModal({
   projectId: string;
   onClose: () => void;
 }) {
+  const [mode, setMode] = useState<"interactive" | "direct">("interactive");
   const [copied, setCopied] = useState(false);
   const [detected, setDetected] = useState(false);
   const appUrl =
     typeof window !== "undefined" ? window.location.origin : "https://your-hub.vercel.app";
 
-  const installCmd = `curl -fsSL ${appUrl}/install.sh | EZMON_SERVER_URL=${appUrl} EZMON_TOKEN=${projectId} sh`;
+  const interactiveCmd = `curl -fsSL ${appUrl}/install.sh | EZMON_SERVER_URL=${appUrl} sh`;
+  const directCmd = `curl -fsSL ${appUrl}/install.sh | EZMON_SERVER_URL=${appUrl} EZMON_TOKEN=${projectId} sh`;
+  const currentCmd = mode === "interactive" ? interactiveCmd : directCmd;
 
   function copyToClipboard() {
-    navigator.clipboard.writeText(installCmd);
+    navigator.clipboard.writeText(currentCmd);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
@@ -60,12 +63,41 @@ export function InstallModal({
         </div>
 
         <div className="p-6 overflow-y-auto space-y-5">
+          {/* Mode Selector */}
+          <div className="flex items-center gap-2 p-1 bg-muted/60 rounded-lg border border-border">
+            <button
+              onClick={() => setMode("interactive")}
+              className={`flex-1 py-2 px-3 rounded-md text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                mode === "interactive"
+                  ? "bg-background text-foreground shadow-sm border border-border/80"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              Interactive (Secure)
+            </button>
+            <button
+              onClick={() => setMode("direct")}
+              className={`flex-1 py-2 px-3 rounded-md text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                mode === "direct"
+                  ? "bg-background text-foreground shadow-sm border border-border/80"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Direct (One-liner)
+            </button>
+          </div>
+
           {/* Command */}
           <div className="bg-background border border-border rounded-lg overflow-hidden shadow-sm">
             <div className="bg-muted/50 border-b border-border px-4 py-3 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-6 h-6 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-xs font-mono text-primary">1</div>
-                <h3 className="font-semibold text-sm text-foreground">Run on target server (Linux, as root)</h3>
+                <h3 className="font-semibold text-sm text-foreground">
+                  {mode === "interactive"
+                    ? "Run on target server (Interactive Prompt)"
+                    : "Run on target server (Direct Token)"}
+                </h3>
               </div>
               <div className="flex gap-1.5">
                 <div className="w-3 h-3 rounded-full bg-muted-foreground/30" />
@@ -75,7 +107,17 @@ export function InstallModal({
             </div>
             <div className="p-5 bg-zinc-950 relative group flex flex-col gap-4">
               <div className="relative bg-black border border-zinc-800 rounded-md p-4 overflow-x-auto">
-                <pre className="text-sm text-zinc-300 font-mono whitespace-pre"><span className="text-blue-400">curl</span> <span className="text-zinc-400">-fsSL</span> <span className="text-emerald-400">{appUrl}/install.sh</span> <span className="text-zinc-500">|</span> <span className="text-purple-400">EZMON_SERVER_URL</span><span className="text-zinc-300">=</span><span className="text-emerald-400">{appUrl}</span> <span className="text-purple-400">EZMON_TOKEN</span><span className="text-zinc-300">=</span><span className="text-orange-300">{projectId}</span> <span className="text-blue-400">sh</span></pre>
+                <pre className="text-sm text-zinc-300 font-mono whitespace-pre">
+                  {mode === "interactive" ? (
+                    <>
+                      <span className="text-blue-400">curl</span> <span className="text-zinc-400">-fsSL</span> <span className="text-emerald-400">{appUrl}/install.sh</span> <span className="text-zinc-500">|</span> <span className="text-purple-400">EZMON_SERVER_URL</span><span className="text-zinc-300">=</span><span className="text-emerald-400">{appUrl}</span> <span className="text-blue-400">sh</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-blue-400">curl</span> <span className="text-zinc-400">-fsSL</span> <span className="text-emerald-400">{appUrl}/install.sh</span> <span className="text-zinc-500">|</span> <span className="text-purple-400">EZMON_SERVER_URL</span><span className="text-zinc-300">=</span><span className="text-emerald-400">{appUrl}</span> <span className="text-purple-400">EZMON_TOKEN</span><span className="text-zinc-300">=</span><span className="text-orange-300">{projectId}</span> <span className="text-blue-400">sh</span>
+                    </>
+                  )}
+                </pre>
                 <Button
                   size="icon"
                   variant="outline"
@@ -85,13 +127,27 @@ export function InstallModal({
                   {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
                 </Button>
               </div>
-              <div className="flex items-start gap-3 bg-blue-500/10 border border-blue-500/20 rounded-md p-3">
-                <Server size={16} className="text-blue-400 mt-0.5 shrink-0" />
-                <p className="text-xs text-blue-200/70 leading-relaxed">
-                  The script auto-detects your system architecture, installs the binary to{" "}
-                  <code className="font-mono bg-blue-900/40 px-1 rounded border border-blue-500/20">/usr/local/bin/ezmon-agent</code>, and configures a systemd service.
-                </p>
-              </div>
+
+              {mode === "interactive" && (
+                <div className="flex items-start gap-3 bg-emerald-500/10 border border-emerald-500/20 rounded-md p-3">
+                  <Server size={16} className="text-emerald-400 mt-0.5 shrink-0" />
+                  <p className="text-xs text-emerald-200/80 leading-relaxed">
+                    <strong className="text-emerald-400">Interactive Secure Mode:</strong> The installer will prompt you for your Project Token on execution. Your token will <strong>NOT</strong> be recorded in shell history (<code className="font-mono bg-emerald-950/60 px-1 rounded border border-emerald-500/20">.bash_history</code>).
+                    <br />
+                    <span className="text-zinc-400 mt-1 block">Project Token: <code className="font-mono text-orange-300 select-all bg-black/40 px-1 rounded">{projectId}</code></span>
+                  </p>
+                </div>
+              )}
+
+              {mode === "direct" && (
+                <div className="flex items-start gap-3 bg-blue-500/10 border border-blue-500/20 rounded-md p-3">
+                  <Server size={16} className="text-blue-400 mt-0.5 shrink-0" />
+                  <p className="text-xs text-blue-200/70 leading-relaxed">
+                    The script auto-detects your system architecture, installs the binary to{" "}
+                    <code className="font-mono bg-blue-900/40 px-1 rounded border border-blue-500/20">/usr/local/bin/ezmon-agent</code>, and configures a systemd service.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
