@@ -109,10 +109,10 @@ jobs:
           # Escape karakter regex: titik dan strip jadi literal
           ESCAPED=$(echo "$VERSION" | sed 's/\./\\./g; s/-/\\-/g')
 
-          # Coba cari section untuk versi exact (misal 0.1.1-beta.1)
+          # Coba cari section untuk versi exact (misal v0.1.8 atau 0.1.8)
           SECTION=""
           if [ -f "$CHANGELOG_FILE" ]; then
-            SECTION=$(awk "/^## \[${ESCAPED}\]/{found=1; next} found && /^## \[/{exit} found{print}" "$CHANGELOG_FILE")
+            SECTION=$(awk "/^## (v|\\[)?${ESCAPED}/{found=1; next} found && /^## /{exit} found{print}" "$CHANGELOG_FILE")
           fi
 
           # Fallback: jika beta/prerelease, cari base version (0.1.1-beta.1 → 0.1.1)
