@@ -23,7 +23,6 @@
   },
   "pnpm": {
     "overrides": {
-      "@cloudflare/workers-types": "4.20260508.1",
       "drizzle-orm": "^0.39.3"
     }
   }
