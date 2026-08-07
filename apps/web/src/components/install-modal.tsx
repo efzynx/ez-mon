@@ -208,15 +208,20 @@ export function InstallModal({
                 </span>
               ) : (
                 <span className="text-orange-300 font-bold select-all tracking-wider">
-                  {regToken}
+                  {regToken || projectId}
                 </span>
               )}
 
-              {!isExpired && !loadingToken && regToken && (
+              {!isExpired && !loadingToken && (regToken || projectId) && (
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={copyToken}
+                  onClick={() => {
+                    const activeToken = regToken || projectId;
+                    navigator.clipboard.writeText(activeToken);
+                    setTokenCopied(true);
+                    setTimeout(() => setTokenCopied(false), 2000);
+                  }}
                   className="h-7 text-xs bg-background border-border text-foreground hover:bg-muted"
                 >
                   {tokenCopied ? (
