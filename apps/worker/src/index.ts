@@ -668,85 +668,67 @@ async function runCloudChecks(env: Env): Promise<void> {
 
   if (successfulChecks.length === 0) return;
 
-  // ── BATCH INSERT ──────────────────────────────────────────────────────────
-  // Menggabungkan semua insert ke dalam satu query untuk menghemat subrequests
-  const insertParams: unknown[] = [];
-  const insertValues: string[] = [];
-  
-  successfulChecks.forEach(({ monitor, checkResult }, idx) => {
-    const offset = idx * 7;
-    insertValues.push(`(gen_random_uuid(), $${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, NOW())`);
-    insertParams.push(
-      monitor.id,
-      checkResult.status,
-      checkResult.httpStatus,
-      checkResult.latencyMs,
-      checkResult.error,
-      checkResult.keywordFound,
-      checkResult.tlsDaysRemaining
-    );
-  });
+  // ── 1. INSERT HISTORI RESULTS (PARALEL) ───────────────────────────────────
+  await Promise.allSettled(
+    successfulChecks.map(({ monitor, checkResult }) =>
+      queryNeon(
+        env,
+        `INSERT INTO cloud_check_results
+           (id, monitor_id, status, http_status, latency_ms, error, keyword_found, tls_days_remaining, checked_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, NOW())`,
+        [
+          monitor.id,
+          checkResult.status,
+          checkResult.httpStatus,
+          checkResult.latencyMs,
+          checkResult.error,
+          checkResult.keywordFound,
+          checkResult.tlsDaysRemaining,
+        ]
+      ).catch((e) => console.error(`[cloud] Insert result failed for ${monitor.name}:`, e))
+    )
+  );
 
-  try {
-    await queryNeon(
-      env,
-      `INSERT INTO cloud_check_results
-         (id, monitor_id, status, http_status, latency_ms, error, keyword_found, tls_days_remaining, checked_at)
-       VALUES ${insertValues.join(", ")}`,
-      insertParams
-    );
-  } catch (e) {
-    console.error("[cloud] Batch INSERT failed:", e);
-  }
-
-  // ── BATCH UPDATE ──────────────────────────────────────────────────────────
-  const updateParams: unknown[] = [];
-  const updateValues: string[] = [];
-  
-  successfulChecks.forEach(({ monitor, checkResult }, idx) => {
-    const offset = idx * 5;
-    const nextCheckAt = new Date(Date.now() + monitor.interval_sec * 1000).toISOString();
-    const tlsExpiresAt = checkResult.tlsDaysRemaining !== null
-      ? new Date(Date.now() + checkResult.tlsDaysRemaining * 86400000).toISOString()
-      : null;
-      
-    updateValues.push(`($${offset + 1}::uuid, $${offset + 2}::text, $${offset + 3}::int, $${offset + 4}::timestamptz, $${offset + 5}::timestamptz)`);
-    updateParams.push(
-      monitor.id,
-      checkResult.status,
-      checkResult.latencyMs,
-      nextCheckAt,
-      tlsExpiresAt
-    );
-  });
-
-  // ── Simpan prev_status SEBELUM update dari data original query ──────────
-  // (Tidak menggunakan RETURNING subquery karena subquery berjalan SETELAH
-  // UPDATE sehingga selalu return nilai baru, bukan nilai lama)
+  // ── 2. UPDATE STATE MONITORS (PARALEL) ────────────────────────────────────
   const prevStatusMap = new Map<string, string>();
   successfulChecks.forEach(({ monitor }) => {
     prevStatusMap.set(monitor.id, monitor.last_status);
   });
 
-  // Kami mengupdate tabel cloud_monitors
-  try {
-    await queryNeon(
-      env,
-      `UPDATE cloud_monitors AS c
-       SET last_status = v.last_status,
-           last_checked_at = NOW(),
-           last_latency_ms = v.last_latency_ms,
-           next_check_at = v.next_check_at,
-           tls_expires_at = COALESCE(v.tls_expires_at, c.tls_expires_at),
-           updated_at = NOW()
-       FROM (VALUES ${updateValues.join(", ")}) AS v(id, last_status, last_latency_ms, next_check_at, tls_expires_at)
-       WHERE c.id = v.id`,
-      updateParams
-    );
-    console.log(`[cloud] Batch UPDATE ${successfulChecks.length} monitors OK`);
-  } catch (e) {
-    console.error("[cloud] Batch UPDATE failed:", e);
-  }
+  let updateCount = 0;
+  await Promise.allSettled(
+    successfulChecks.map(async ({ monitor, checkResult }) => {
+      const nextCheckAt = new Date(Date.now() + monitor.interval_sec * 1000).toISOString();
+      const tlsExpiresAt = checkResult.tlsDaysRemaining !== null
+        ? new Date(Date.now() + checkResult.tlsDaysRemaining * 86400000).toISOString()
+        : null;
+
+      try {
+        await queryNeon(
+          env,
+          `UPDATE cloud_monitors
+           SET last_status = $1,
+               last_checked_at = NOW(),
+               last_latency_ms = $2,
+               next_check_at = $3,
+               tls_expires_at = COALESCE($4, tls_expires_at),
+               updated_at = NOW()
+           WHERE id = $5`,
+          [
+            checkResult.status,
+            checkResult.latencyMs,
+            nextCheckAt,
+            tlsExpiresAt,
+            monitor.id,
+          ]
+        );
+        updateCount++;
+      } catch (e) {
+        console.error(`[cloud] Update monitor failed for ${monitor.name} (${monitor.id}):`, e);
+      }
+    })
+  );
+  console.log(`[cloud] Updated ${updateCount}/${successfulChecks.length} monitors OK`);
 
   // ── DETEKSI TRANSISI ──────────────────────────────────────────────────────
   for (const { monitor, checkResult } of successfulChecks) {

@@ -1,4 +1,4 @@
-name = "ezmon-evaluator"
+name = "ezmon-evaluator-v2"
 main = "src/index.ts"
 compatibility_date = "2026-08-01"
 compatibility_flags = ["nodejs_compat"]
