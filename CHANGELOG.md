@@ -9,6 +9,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## v0.1.11 — 2026-08-07
+
+### Added
+- **Update Agent One-Time Token Card** — Integrated full One-Time Registration Token block (`reg_...`) with 5-minute countdown timer, 1-click Copy button, and refresh button inside `UpdateAgentModal`.
+- **Terminal Prompt Guidance** — Added explicit UI instructions in `UpdateAgentModal` guiding users to paste their One-Time Token when prompted by `install.sh` in their SSH terminal.
+
+### Fixed
+- **Countdown Timer Smooth Ticking** — Refactored timer interval logic in `InstallModal` & `UpdateAgentModal` to recalculate remaining seconds immediately on mount and tick down smoothly every second without freezing at 05:00.
+- **Agent Detail Project ID Prop** — Passed `agent.projectId` to `UpdateAgentModal` enabling authorized temporary token generation during agent upgrades.
+
+---
+
 ## v0.1.10 — 2026-08-07
 
 ### Added

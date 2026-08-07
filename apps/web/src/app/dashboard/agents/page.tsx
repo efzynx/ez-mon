@@ -241,9 +241,9 @@ export default function AgentsPage() {
                       <TableCell className="whitespace-nowrap font-mono text-xs py-4">
                         <div className="flex items-center gap-2">
                           <span className="text-muted-foreground">{agent.os}/{agent.arch}</span>
-                          {agent.version && agent.version.replace(/^v/, "").trim() !== "0.1.10" && agent.version !== "dev" && agent.version !== "vdev" && (
+                          {agent.version && agent.version.replace(/^v/, "").trim() !== "0.1.11" && agent.version !== "dev" && agent.version !== "vdev" && (
                             <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/30 text-[9px] px-1.5 py-0 h-4 font-mono">
-                              v{agent.version.replace(/^v/, "")} ➔ v0.1.10
+                              v{agent.version.replace(/^v/, "")} ➔ v0.1.11
                             </Badge>
                           )}
                         </div>

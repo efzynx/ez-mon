@@ -20,7 +20,7 @@ import { AgentCharts } from "./AgentCharts";
 import { AgentLocationMap } from "./AgentLocationMap";
 import { UpdateAgentModal } from "@/components/update-agent-modal";
 
-const HUB_VERSION = "0.1.10";
+const HUB_VERSION = "0.1.11";
 
 function isOutdatedVersion(agentVer?: string | null, hubVer = HUB_VERSION) {
   if (!agentVer) return false;
@@ -629,6 +629,7 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
     {showUpdateModal && agent && (
       <UpdateAgentModal
         agentName={agent.name}
+        projectId={agent.projectId}
         currentVersion={agent.version || "0.0.0"}
         latestVersion={HUB_VERSION}
         onClose={() => setShowUpdateModal(false)}

@@ -93,6 +93,7 @@ export async function GET(req: NextRequest) {
 
       return {
         id: row.agent.id,
+        projectId: row.agent.projectId,
         name: row.agent.name,
         hostname: row.agent.hostname,
         os: row.agent.os,

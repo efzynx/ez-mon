@@ -38,9 +38,12 @@ export function InstallModal({
       if (data.success && data.data) {
         setRegToken(data.data.token);
         setExpiresAt(data.data.expiresAt);
+      } else {
+        // Fallback expiresAt to 5 minutes from now if fallback token is used
+        setExpiresAt(new Date(Date.now() + 5 * 60 * 1000).toISOString());
       }
     } catch {
-      /* silent */
+      setExpiresAt(new Date(Date.now() + 5 * 60 * 1000).toISOString());
     } finally {
       setLoadingToken(false);
     }
@@ -50,17 +53,24 @@ export function InstallModal({
     fetchRegToken();
   }, [fetchRegToken]);
 
-  // Countdown Timer 5 Menit
+  // Countdown Timer 5 Menit (Selalu berjalan mulus)
   useEffect(() => {
-    if (!expiresAt) return;
-    const interval = setInterval(() => {
+    const getRemainingSec = () => {
+      if (!expiresAt) return 300;
       const diffMs = new Date(expiresAt).getTime() - Date.now();
-      const diffSec = Math.max(0, Math.floor(diffMs / 1000));
-      setTimeLeftSec(diffSec);
-      if (diffSec === 0) {
+      return Math.max(0, Math.floor(diffMs / 1000));
+    };
+
+    setTimeLeftSec(getRemainingSec());
+
+    const interval = setInterval(() => {
+      const remaining = getRemainingSec();
+      setTimeLeftSec(remaining);
+      if (remaining === 0) {
         clearInterval(interval);
       }
     }, 1000);
+
     return () => clearInterval(interval);
   }, [expiresAt]);
 
@@ -70,12 +80,7 @@ export function InstallModal({
     setTimeout(() => setCmdCopied(false), 2000);
   }
 
-  function copyToken() {
-    if (!regToken) return;
-    navigator.clipboard.writeText(regToken);
-    setTokenCopied(true);
-    setTimeout(() => setTokenCopied(false), 2000);
-  }
+  const activeToken = regToken || projectId;
 
   // Format MM:SS
   const minutes = Math.floor(timeLeftSec / 60);
@@ -208,16 +213,15 @@ export function InstallModal({
                 </span>
               ) : (
                 <span className="text-orange-300 font-bold select-all tracking-wider">
-                  {regToken || projectId}
+                  {activeToken}
                 </span>
               )}
 
-              {!isExpired && !loadingToken && (regToken || projectId) && (
+              {!isExpired && !loadingToken && activeToken && (
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => {
-                    const activeToken = regToken || projectId;
                     navigator.clipboard.writeText(activeToken);
                     setTokenCopied(true);
                     setTimeout(() => setTokenCopied(false), 2000);

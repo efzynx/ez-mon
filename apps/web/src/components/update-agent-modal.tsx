@@ -1,32 +1,96 @@
 "use client";
 
-import { useState } from "react";
-import { Copy, Check, X, ArrowUpCircle, Server, ShieldCheck } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+import { Copy, Check, X, ArrowUpCircle, Server, ShieldCheck, Key, Clock, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function UpdateAgentModal({
   agentName,
+  projectId,
   currentVersion,
   latestVersion,
   onClose,
 }: {
   agentName: string;
+  projectId: string;
   currentVersion: string;
   latestVersion: string;
   onClose: () => void;
 }) {
-  const [copied, setCopied] = useState(false);
+  const [cmdCopied, setCmdCopied] = useState(false);
+  const [tokenCopied, setTokenCopied] = useState(false);
+
+  const [regToken, setRegToken] = useState<string | null>(null);
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [timeLeftSec, setTimeLeftSec] = useState<number>(300);
+  const [loadingToken, setLoadingToken] = useState<boolean>(true);
 
   const appUrl =
     typeof window !== "undefined" ? window.location.origin : "https://your-hub.vercel.app";
 
   const updateCmd = `curl -fsSL ${appUrl}/install.sh | EZMON_SERVER_URL=${appUrl} sh`;
 
-  function copyToClipboard() {
+  // Fetch temporary token for updating agent
+  const fetchRegToken = useCallback(async () => {
+    setLoadingToken(true);
+    try {
+      const res = await fetch("/api/dashboard/projects/reg-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId }),
+      });
+      const data = await res.json();
+      if (data.success && data.data) {
+        setRegToken(data.data.token);
+        setExpiresAt(data.data.expiresAt);
+      } else {
+        setExpiresAt(new Date(Date.now() + 5 * 60 * 1000).toISOString());
+      }
+    } catch {
+      setExpiresAt(new Date(Date.now() + 5 * 60 * 1000).toISOString());
+    } finally {
+      setLoadingToken(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    fetchRegToken();
+  }, [fetchRegToken]);
+
+  // Countdown Timer 5 Menit (Smooth tick)
+  useEffect(() => {
+    const getRemainingSec = () => {
+      if (!expiresAt) return 300;
+      const diffMs = new Date(expiresAt).getTime() - Date.now();
+      return Math.max(0, Math.floor(diffMs / 1000));
+    };
+
+    setTimeLeftSec(getRemainingSec());
+
+    const interval = setInterval(() => {
+      const remaining = getRemainingSec();
+      setTimeLeftSec(remaining);
+      if (remaining === 0) {
+        clearInterval(interval);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [expiresAt]);
+
+  function copyCmd() {
     navigator.clipboard.writeText(updateCmd);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setCmdCopied(true);
+    setTimeout(() => setCmdCopied(false), 2000);
   }
+
+  const activeToken = regToken || projectId;
+
+  // Format MM:SS
+  const minutes = Math.floor(timeLeftSec / 60);
+  const seconds = timeLeftSec % 60;
+  const timeFormatted = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  const isExpired = timeLeftSec === 0;
 
   const formattedCurrent = currentVersion.startsWith("v")
     ? currentVersion
@@ -119,13 +183,87 @@ export function UpdateAgentModal({
                 <Button
                   size="icon"
                   variant="outline"
-                  onClick={copyToClipboard}
+                  onClick={copyCmd}
                   className="absolute top-2 right-2 h-8 w-8 bg-zinc-900 border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
                 >
-                  {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                  {cmdCopied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
                 </Button>
               </div>
             </div>
+          </div>
+
+          {/* One-Time Registration Token & Timer Card for Update */}
+          <div className="bg-background border border-border rounded-lg p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Key size={16} className="text-primary" />
+                <span className="text-xs font-semibold text-foreground uppercase tracking-wider">
+                  Registration Token for Terminal Prompt
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {isExpired ? (
+                  <span className="text-xs font-medium text-destructive bg-destructive/10 px-2.5 py-1 rounded-full border border-destructive/20">
+                    Expired
+                  </span>
+                ) : (
+                  <div className="flex items-center gap-1.5 text-xs font-mono font-medium text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+                    <Clock size={12} className="animate-spin text-emerald-400" />
+                    <span>{timeFormatted}</span>
+                  </div>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={fetchRegToken}
+                  disabled={loadingToken}
+                  className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                  title="Generate new token"
+                >
+                  <RefreshCw size={12} className={loadingToken ? "animate-spin" : ""} />
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between bg-muted/40 border border-border/80 rounded-md p-3 font-mono text-sm">
+              {loadingToken ? (
+                <span className="text-xs text-muted-foreground animate-pulse">Generating token...</span>
+              ) : isExpired ? (
+                <span className="text-xs text-destructive">
+                  Token expired. Click refresh to generate a new token.
+                </span>
+              ) : (
+                <span className="text-orange-300 font-bold select-all tracking-wider">
+                  {activeToken}
+                </span>
+              )}
+
+              {!isExpired && !loadingToken && activeToken && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    navigator.clipboard.writeText(activeToken);
+                    setTokenCopied(true);
+                    setTimeout(() => setTokenCopied(false), 2000);
+                  }}
+                  className="h-7 text-xs bg-background border-border text-foreground hover:bg-muted"
+                >
+                  {tokenCopied ? (
+                    <>
+                      <Check size={12} className="mr-1 text-emerald-400" /> Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={12} className="mr-1" /> Copy Token
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-normal">
+              When prompted <code className="font-mono text-foreground bg-muted px-1 py-0.5 rounded">Enter EZMON Project Token:</code> in your SSH terminal, paste this token.
+            </p>
           </div>
 
           {/* Safe Update Info */}

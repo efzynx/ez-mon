@@ -29,6 +29,7 @@ export interface AgentRegistrationResponse {
 
 export interface DashboardAgent {
   id: string;
+  projectId: string;
   name: string;
   hostname: string | null;
   os: string | null;
