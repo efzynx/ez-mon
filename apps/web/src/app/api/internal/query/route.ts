@@ -79,14 +79,14 @@ export async function POST(request: NextRequest) {
  * Parameter tetap di-escape untuk mencegah SQL injection dari data yang dikirim.
  */
 function buildParameterizedQuery(query: string, params: unknown[]): string {
-  let result = query;
-  // Ganti dari $N terbesar ke terkecil untuk menghindari $1 mengganti bagian dari $10
-  for (let i = params.length; i >= 1; i--) {
-    const value = params[i - 1];
-    const escaped = escapeValue(value);
-    result = result.replace(new RegExp(`\\$${i}`, "g"), escaped);
-  }
-  return result;
+  if (!params || params.length === 0) return query;
+  return query.replace(/\$([1-9]\d*)(?!\d)/g, (match, numStr) => {
+    const idx = parseInt(numStr, 10) - 1;
+    if (idx >= 0 && idx < params.length) {
+      return escapeValue(params[idx]);
+    }
+    return match;
+  });
 }
 
 function escapeValue(value: unknown): string {
