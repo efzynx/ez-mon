@@ -7,6 +7,9 @@ import * as schema from "./schema/index";
 export function createDb(databaseUrl: string) {
   const client = postgres(databaseUrl, {
     prepare: false,
+    connect_timeout: 5,
+    idle_timeout: 5,
+    max: 10,
   });
   return drizzle(client, { schema });
 }
