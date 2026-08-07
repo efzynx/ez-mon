@@ -7,6 +7,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- **Profile Settings Feature & UI (`/dashboard/profile`)** — Created dedicated user Profile Settings page allowing users to view account details, update full name, and change account passwords.
+- **Email OTP Verification for Password Change (10-minute expiry)** — Implemented 6-digit OTP email verification flow for password updates (`POST /api/dashboard/profile/send-code` & `PATCH /api/dashboard/profile`). Includes real-time password match validation, 10-minute countdown timer (`09:59` to `00:00`), and Resend email service integration.
+- **Forgot Password Trigger in Profile Settings** — Added instant "Lupa Password?" trigger inside Profile Settings password card calling `POST /api/auth/forgot-password` to send reset link emails.
+- **Desktop Sidebar Collapse / Expand (Minimize & Maximize)** — Implemented desktop sidebar toggle supporting Minimized mode (`w-20` / 80px) and Maximized mode (`w-80` / 320px) with `localStorage` persistence (`ezmon_sidebar_collapsed`) and smooth dynamic auto-expansion of main content container and topbar (`md:left-80` vs `md:left-20`). Preserved mobile drawer UX untouched.
+
+### Improved
+- **Full-Width Responsive Dashboard & Sub-Pages** — Expanded main content container from fixed `max-w-7xl` (1280px) to dynamic full-screen width `max-w-[1920px]` with responsive padding (`px-4 md:px-8 lg:px-10`), eliminating empty screen margins across Overview, Agents, Monitors, Incidents, Status Page, Settings, and Profile views.
+- **Desktop Sidebar Overhaul (`w-80` / 320px)** — Expanded desktop sidebar width to 320px and added rich UI elements: Live status badge, active Workspace/Project Switcher Card, grouped navigation sections (`MONITORING & FLEET`, `ALERTS & PUBLIC PAGE`), and a real-time System Status Health Card widget.
+- **Instant TopBar User Name & Avatar Sync** — Updated NextAuth `jwt` & `session` callbacks in `auth.ts` to handle `trigger === "update"`, and added `ezmon_user_updated` custom window event listener in `TopAppBar` for instant avatar and name reflection upon profile edits without page reloads.
+
+### Fixed
+- **React Rules of Hooks Order Fix** — Fixed hook execution order violation in `ProfilePage` by declaring all `useState` hooks before conditional rendering returns.
+
 ---
 
 ## v0.1.14 — 2026-08-07

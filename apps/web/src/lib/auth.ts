@@ -94,26 +94,33 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
       return true;
     },
-    async jwt({ token, user, account }) {
+    async jwt({ token, user, account, trigger, session }) {
       if (user) {
         if (account?.provider === "github" && user.email) {
           const dbUser = await db()
-            .select({ id: users.id })
+            .select({ id: users.id, name: users.name })
             .from(users)
             .where(eq(users.email, user.email.trim().toLowerCase()))
             .limit(1);
           if (dbUser[0]) {
             token.id = dbUser[0].id;
+            if (dbUser[0].name) token.name = dbUser[0].name;
           }
         } else {
           token.id = user.id;
+          if (user.name) token.name = user.name;
         }
+      }
+
+      if (trigger === "update" && session?.name) {
+        token.name = session.name;
       }
       return token;
     },
     async session({ session, token }) {
-      if (session.user && token.id) {
-        session.user.id = token.id as string;
+      if (session.user) {
+        if (token.id) session.user.id = token.id as string;
+        if (token.name) session.user.name = token.name as string;
       }
       return session;
     },

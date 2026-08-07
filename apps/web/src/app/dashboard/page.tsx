@@ -251,7 +251,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pt-4">
                     {overview.agents.map((agent) => {
                       const isOnline = agent.derivedStatus === "online";
                       const cpuPct = agent.state?.cpuPct || 0;
