@@ -98,6 +98,12 @@ jobs:
           cp ../../ezmon-agent-linux-amd64-${TAG} ../../ezmon-agent-linux-amd64
           cp ../../ezmon-agent-linux-arm64-${TAG} ../../ezmon-agent-linux-arm64
 
+          # Create SHA-256 checksum files
+          sha256sum ../../ezmon-agent-linux-amd64-${TAG} | awk '{print $1}' > ../../ezmon-agent-linux-amd64-${TAG}.sha256
+          sha256sum ../../ezmon-agent-linux-arm64-${TAG} | awk '{print $1}' > ../../ezmon-agent-linux-arm64-${TAG}.sha256
+          sha256sum ../../ezmon-agent-linux-amd64 | awk '{print $1}' > ../../ezmon-agent-linux-amd64.sha256
+          sha256sum ../../ezmon-agent-linux-arm64 | awk '{print $1}' > ../../ezmon-agent-linux-arm64.sha256
+
       # ── 6. Ekstrak changelog untuk versi ini dari CHANGELOG.md ─────────────
       - name: Extract changelog section
         if: steps.check_tag.outputs.exists == 'false'
@@ -120,7 +126,7 @@ jobs:
             BASE_VERSION="${VERSION%%-*}"
             BASE_ESCAPED=$(echo "$BASE_VERSION" | sed 's/\./\\./g')
             if [ -f "$CHANGELOG_FILE" ]; then
-              SECTION=$(awk "/^## \[${BASE_ESCAPED}\]/{found=1; next} found && /^## \[/{exit} found{print}" "$CHANGELOG_FILE")
+              SECTION=$(awk "/^## (v|\\[)?${BASE_ESCAPED}/{found=1; next} found && /^## /{exit} found{print}" "$CHANGELOG_FILE")
             fi
             if [ -n "$SECTION" ]; then
               SECTION="*(Changelog dari base version ${BASE_VERSION})*"$'\n'"$SECTION"
@@ -174,7 +180,7 @@ jobs:
           tag: ${{ steps.pkg.outputs.tag }}
           name: "EZMON ${{ steps.pkg.outputs.release_type }} v${{ steps.pkg.outputs.version }}"
           bodyFile: /tmp/release_body.md
-          artifacts: "ezmon-agent-linux-amd64-${{ steps.pkg.outputs.tag }},ezmon-agent-linux-arm64-${{ steps.pkg.outputs.tag }},ezmon-agent-linux-amd64,ezmon-agent-linux-arm64"
+          artifacts: "ezmon-agent-linux-amd64-${{ steps.pkg.outputs.tag }},ezmon-agent-linux-arm64-${{ steps.pkg.outputs.tag }},ezmon-agent-linux-amd64,ezmon-agent-linux-arm64,ezmon-agent-linux-amd64-${{ steps.pkg.outputs.tag }}.sha256,ezmon-agent-linux-arm64-${{ steps.pkg.outputs.tag }}.sha256,ezmon-agent-linux-amd64.sha256,ezmon-agent-linux-arm64.sha256"
           prerelease: ${{ steps.pkg.outputs.prerelease }}
           makeLatest: ${{ steps.pkg.outputs.prerelease == 'false' }}
           allowUpdates: true
@@ -195,7 +201,7 @@ jobs:
             **Current stable:** v${{ steps.pkg.outputs.version }}
 
             Download the binary or use the install script from your EZMON dashboard for automatic setup.
-          artifacts: "ezmon-agent-linux-amd64,ezmon-agent-linux-arm64"
+          artifacts: "ezmon-agent-linux-amd64,ezmon-agent-linux-arm64,ezmon-agent-linux-amd64.sha256,ezmon-agent-linux-arm64.sha256"
           allowUpdates: true
           replacesArtifacts: true
           makeLatest: true

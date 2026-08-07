@@ -375,3 +375,26 @@ export const cloudCheckResults = pgTable(
   ]
 );
 
+// ─── Agent Registration Tokens ────────────────────────────────────────────────
+// Token registrasi sementara (1-time use, TTL 5 menit) untuk keamanan onboarding agent.
+
+export const agentRegistrationTokens = pgTable(
+  "agent_registration_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    token: text("token").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_reg_tokens_project_id").on(table.projectId),
+    uniqueIndex("idx_reg_tokens_token").on(table.token),
+  ]
+);
+

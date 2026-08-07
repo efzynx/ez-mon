@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash, randomBytes } from "crypto";
 import { db } from "@/lib/db";
-import { agents, projects, eq, and } from "@ezmon/db";
+import { agents, projects, agentRegistrationTokens, eq, and } from "@ezmon/db";
 import { registerAgentSchema } from "@ezmon/shared";
 import { DEFAULTS } from "@ezmon/shared";
 
@@ -24,18 +24,61 @@ export async function POST(req: NextRequest) {
 
     const { projectToken, hostname, os, arch, version, name } = parsed.data;
 
-    // Verify project token — for MVP, projectToken is the project ID
-    // In production, this would be a separate token with its own hash
-    const project = await db()
-      .select({ id: projects.id })
-      .from(projects)
-      .where(eq(projects.id, projectToken))
-      .limit(1);
+    let targetProjectId: string | null = null;
+    let regTokenId: string | null = null;
 
-    if (project.length === 0) {
+    if (projectToken.startsWith("reg_")) {
+      const regRecord = await db()
+        .select()
+        .from(agentRegistrationTokens)
+        .where(eq(agentRegistrationTokens.token, projectToken))
+        .limit(1);
+
+      if (regRecord.length === 0) {
+        return NextResponse.json(
+          { success: false, error: "Invalid registration token" },
+          { status: 401 }
+        );
+      }
+
+      const rec = regRecord[0];
+      if (rec.usedAt) {
+        return NextResponse.json(
+          { success: false, error: "Registration token has already been used" },
+          { status: 401 }
+        );
+      }
+
+      if (rec.expiresAt < new Date()) {
+        return NextResponse.json(
+          { success: false, error: "Registration token has expired (5-minute TTL)" },
+          { status: 401 }
+        );
+      }
+
+      targetProjectId = rec.projectId;
+      regTokenId = rec.id;
+    } else {
+      // Fallback: direct projectId lookup
+      const project = await db()
+        .select({ id: projects.id })
+        .from(projects)
+        .where(eq(projects.id, projectToken))
+        .limit(1);
+
+      if (project.length === 0) {
+        return NextResponse.json(
+          { success: false, error: "Invalid project token" },
+          { status: 401 }
+        );
+      }
+      targetProjectId = project[0].id;
+    }
+
+    if (!targetProjectId) {
       return NextResponse.json(
-        { success: false, error: "Invalid project token" },
-        { status: 401 }
+        { success: false, error: "Invalid target project" },
+        { status: 400 }
       );
     }
 
@@ -43,7 +86,7 @@ export async function POST(req: NextRequest) {
     const existingHost = await db()
       .select()
       .from(agents)
-      .where(and(eq(agents.projectId, project[0].id), eq(agents.hostname, hostname)))
+      .where(and(eq(agents.projectId, targetProjectId), eq(agents.hostname, hostname)))
       .limit(1);
 
     // Generate agent token
@@ -78,7 +121,7 @@ export async function POST(req: NextRequest) {
       const agentCount = await db()
         .select({ id: agents.id })
         .from(agents)
-        .where(eq(agents.projectId, project[0].id));
+        .where(eq(agents.projectId, targetProjectId));
 
       if (agentCount.length >= DEFAULTS.MAX_AGENTS_PER_PROJECT) {
         return NextResponse.json(
@@ -91,7 +134,7 @@ export async function POST(req: NextRequest) {
       result = await db()
         .insert(agents)
         .values({
-          projectId: project[0].id,
+          projectId: targetProjectId,
           name,
           tokenHash,
           hostname,
@@ -112,9 +155,17 @@ export async function POST(req: NextRequest) {
       console.log(`[agent/register] New agent registered: ${result[0].id}`);
     }
 
+    // Mark registration token as used if it was a 1-time token
+    if (regTokenId) {
+      await db()
+        .update(agentRegistrationTokens)
+        .set({ usedAt: new Date() })
+        .where(eq(agentRegistrationTokens.id, regTokenId));
+    }
+
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
-    console.log(`[agent/register] Agent registered: ${result[0].id} for project: ${project[0].id}`);
+    console.log(`[agent/register] Agent registered: ${result[0].id} for project: ${targetProjectId}`);
 
     return NextResponse.json(
       {

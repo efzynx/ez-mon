@@ -9,6 +9,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## v0.1.9 — 2026-08-07
+
+### Security
+- **One-Time Agent Registration Tokens (5-minute TTL)** — Introduced single-use temporary onboarding tokens (`reg_...`) with a 5-minute time-to-live to eliminate project token exposure and token replay attacks.
+- **SHA-256 Checksum Verification** — Added SHA-256 binary hash verification in `install.sh` prior to binary execution, protecting hosts against corrupted or tampered binary downloads.
+- **Automated SHA-256 Release Pipeline** — Updated GitHub Release workflow (`release.yml`) to automatically generate and attach `.sha256` checksum files for all platform binaries.
+
+### Added
+- **Registration Tokens Database Table** — Created `agent_registration_tokens` table in `@ezmon/db` storing `token`, `expiresAt`, `usedAt`, and `projectId`.
+- **Registration Token API Endpoint** — Implemented `POST /api/dashboard/projects/reg-token` route for authenticated temporary token generation.
+
+### Changed
+- **Streamlined Install Modal UI** — Redesigned `InstallModal` component to remove Direct Mode and verbose text, presenting a clean 5-minute countdown timer (MM:SS), One-Time Token display, 1-click Copy, and Token Refresh button.
+
+---
+
 ## v0.1.8 — 2026-08-07
 
 ### Added

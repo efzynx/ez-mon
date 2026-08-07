@@ -116,8 +116,29 @@ elif command -v curl > /dev/null 2>&1; then
   esac
 
   BIN_URL="https://github.com/efzynx/ez-mon/releases/download/latest/ezmon-agent-linux-$BIN_ARCH"
+  SHA_URL="${BIN_URL}.sha256"
   info "Downloading binary for linux/$BIN_ARCH from $BIN_URL..."
   curl -fsSL "$BIN_URL" -o /tmp/ezmon-agent-build || fatal "Download failed. Make sure the binary is available at $BIN_URL"
+
+  # Verifikasi Integritas SHA-256 Checksum
+  if curl -fsSL "$SHA_URL" -o /tmp/ezmon-agent-build.sha256 2>/dev/null; then
+    info "Verifying SHA-256 checksum integrity..."
+    EXPECTED_HASH=$(awk '{print $1}' /tmp/ezmon-agent-build.sha256)
+    ACTUAL_HASH=""
+    if command -v sha256sum > /dev/null 2>&1; then
+      ACTUAL_HASH=$(sha256sum /tmp/ezmon-agent-build | awk '{print $1}')
+    elif command -v shasum > /dev/null 2>&1; then
+      ACTUAL_HASH=$(shasum -a 256 /tmp/ezmon-agent-build | awk '{print $1}')
+    fi
+
+    if [ -n "$ACTUAL_HASH" ] && [ -n "$EXPECTED_HASH" ]; then
+      if [ "$ACTUAL_HASH" != "$EXPECTED_HASH" ]; then
+        fatal "SHA-256 checksum verification failed! Binary download corrupted or tampered."
+      fi
+      ok "SHA-256 checksum verified ($ACTUAL_HASH)."
+    fi
+    rm -f /tmp/ezmon-agent-build.sha256
+  fi
 
   if [ "$(id -u)" = "0" ]; then
     mv /tmp/ezmon-agent-build "$BINARY"
@@ -137,7 +158,7 @@ info "Registering agent with hub..."
 OS_NAME=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH_NAME=$(uname -m)
 
-AGENT_VERSION="${EZMON_AGENT_VERSION:-0.1.8}"
+AGENT_VERSION="${EZMON_AGENT_VERSION:-0.1.9}"
 REG_RESPONSE=$(curl -s -X POST "$SERVER_URL/api/agent/register" \
   -H "Content-Type: application/json" \
   -d "{\"projectToken\":\"$EZMON_TOKEN\",\"hostname\":\"$(hostname)\",\"os\":\"$OS_NAME\",\"arch\":\"$ARCH_NAME\",\"version\":\"$AGENT_VERSION\",\"name\":\"$AGENT_NAME\"}" 2>&1)
