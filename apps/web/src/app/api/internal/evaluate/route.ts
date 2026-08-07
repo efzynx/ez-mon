@@ -914,17 +914,7 @@ async function runEvaluator() {
     summary.errors.push(`Recovery detection error: ${String(e)}`);
   }
 
-  // STEP 3: Retention Cleanup — metric_buckets (7 hari)
-  try {
-    await queryDb(
-      `DELETE FROM metric_buckets WHERE bucket_start < NOW() - INTERVAL '7 days'`
-    );
-    summary.retentionCleanup.metricBuckets = true;
-  } catch (e) {
-    summary.errors.push(`Retention metric_buckets error: ${String(e)}`);
-  }
-
-  // STEP 4: Cloud Monitor Checks
+  // STEP 3: Cloud Monitor Checks
   try {
     const cloudRes = await runCloudChecks();
     summary.cloudMonitorsChecked = cloudRes.processedCount;
@@ -932,24 +922,34 @@ async function runEvaluator() {
     summary.errors.push(`Cloud checks error: ${String(e)}`);
   }
 
-  // STEP 5: Retention Cleanup — cloud_check_results (30 hari)
-  try {
-    await queryDb(
-      `DELETE FROM cloud_check_results WHERE checked_at < NOW() - INTERVAL '30 days'`
-    );
-    summary.retentionCleanup.cloudResults = true;
-  } catch (e) {
-    summary.errors.push(`Retention cloud_check_results error: ${String(e)}`);
-  }
+  // STEP 4: Periodic Retention Cleanup (~5% chance per evaluation run)
+  if (Math.random() < 0.05) {
+    try {
+      await queryDb(
+        `DELETE FROM metric_buckets WHERE bucket_start < NOW() - INTERVAL '7 days'`
+      );
+      summary.retentionCleanup.metricBuckets = true;
+    } catch (e) {
+      summary.errors.push(`Retention metric_buckets error: ${String(e)}`);
+    }
 
-  // STEP 6: Retention Cleanup — alert_events (7 hari)
-  try {
-    await queryDb(
-      `DELETE FROM alert_events WHERE created_at < NOW() - INTERVAL '7 days'`
-    );
-    summary.retentionCleanup.alertEvents = true;
-  } catch (e) {
-    summary.errors.push(`Retention alert_events error: ${String(e)}`);
+    try {
+      await queryDb(
+        `DELETE FROM cloud_check_results WHERE checked_at < NOW() - INTERVAL '30 days'`
+      );
+      summary.retentionCleanup.cloudResults = true;
+    } catch (e) {
+      summary.errors.push(`Retention cloud_check_results error: ${String(e)}`);
+    }
+
+    try {
+      await queryDb(
+        `DELETE FROM alert_events WHERE created_at < NOW() - INTERVAL '7 days'`
+      );
+      summary.retentionCleanup.alertEvents = true;
+    } catch (e) {
+      summary.errors.push(`Retention alert_events error: ${String(e)}`);
+    }
   }
 
   return summary;
