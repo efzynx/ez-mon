@@ -9,6 +9,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## v0.1.14 — 2026-08-07
+
+### Improved
+- **Specific Version Tag Download Priority** — Enhanced `install.sh` to prioritize downloading agent binaries directly from versioned release tag URLs (`/releases/download/v0.1.14/...`) before falling back to the rolling `latest` URL, avoiding GitHub CDN caching delays during release workflow runs.
+
+---
+
 ## v0.1.13 — 2026-08-07
 
 ### Added

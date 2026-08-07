@@ -84,7 +84,7 @@ fi
 # ─── Path 1: build from source (monorepo + Go available) ──────────────────────
 if [ -n "$MONOREPO_AGENT_DIR" ] && command -v go > /dev/null 2>&1; then
 
-  BUILD_VERSION="${EZMON_AGENT_VERSION:-0.1.13}"
+  BUILD_VERSION="${EZMON_AGENT_VERSION:-0.1.14}"
   info "Building from source: $MONOREPO_AGENT_DIR (version $BUILD_VERSION)"
   cd "$MONOREPO_AGENT_DIR"
   info "Running go mod tidy..."
@@ -116,8 +116,16 @@ elif command -v curl > /dev/null 2>&1; then
     *)       fatal "Unsupported architecture: $ARCH" ;;
   esac
 
-  BIN_URL="https://github.com/efzynx/ez-mon/releases/download/latest/ezmon-agent-linux-$BIN_ARCH"
+  TAG_BIN_URL="https://github.com/efzynx/ez-mon/releases/download/v${AGENT_VERSION}/ezmon-agent-linux-${BIN_ARCH}-v${AGENT_VERSION}"
+  LATEST_BIN_URL="https://github.com/efzynx/ez-mon/releases/download/latest/ezmon-agent-linux-$BIN_ARCH"
+
+  if curl -fsI "$TAG_BIN_URL" >/dev/null 2>&1; then
+    BIN_URL="$TAG_BIN_URL"
+  else
+    BIN_URL="$LATEST_BIN_URL"
+  fi
   SHA_URL="${BIN_URL}.sha256"
+
   info "Downloading binary for linux/$BIN_ARCH from $BIN_URL..."
   curl -fsSL "$BIN_URL" -o /tmp/ezmon-agent-build || fatal "Download failed. Make sure the binary is available at $BIN_URL"
 
@@ -159,7 +167,7 @@ info "Registering agent with hub..."
 OS_NAME=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH_NAME=$(uname -m)
 
-AGENT_VERSION="${EZMON_AGENT_VERSION:-0.1.13}"
+AGENT_VERSION="${EZMON_AGENT_VERSION:-0.1.14}"
 REG_RESPONSE=$(curl -s -X POST "$SERVER_URL/api/agent/register" \
   -H "Content-Type: application/json" \
   -d "{\"projectToken\":\"$EZMON_TOKEN\",\"hostname\":\"$(hostname)\",\"os\":\"$OS_NAME\",\"arch\":\"$ARCH_NAME\",\"version\":\"$AGENT_VERSION\",\"name\":\"$AGENT_NAME\"}" 2>&1)
