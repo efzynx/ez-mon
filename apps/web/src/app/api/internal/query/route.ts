@@ -13,15 +13,15 @@ import { sql } from "@ezmon/db";
  * TIDAK BOLEH diakses dari client-side / browser.
  */
 export async function POST(request: NextRequest) {
-  // ── Auth: Validasi WORKER_SECRET (dengan fallback otomatis agar bebas ribet) ─────
+  // ── Auth: Validasi CRON_SECRET (dengan fallback otomatis agar bebas ribet) ─────
   const defaultFallback = "ezmon-internal-secret-2026";
-  const workerSecret = (process.env.WORKER_SECRET || defaultFallback).trim();
+  const cronSecret = (process.env.CRON_SECRET || defaultFallback).trim();
 
   const authHeader = request.headers.get("authorization");
-  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+  const tokenHeader = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
 
-  // Izinkan jika token cocok dengan WORKER_SECRET Vercel ATAU fallback default
-  if (!token || (token !== workerSecret && token !== defaultFallback)) {
+  // Izinkan jika token cocok dengan CRON_SECRET Vercel ATAU fallback default
+  if (!tokenHeader || (tokenHeader !== cronSecret && tokenHeader !== defaultFallback)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
   // ── Execute query ─────────────────────────────────────────────────────────
   try {
     const result = await db().execute(
-      sql.raw(buildParameterizedQuery(body.sql, params))
+      sql.raw(buildParameterizedQuery(body.sql, params)) as any
     );
 
     // postgres-js driver dapat mengembalikan:
