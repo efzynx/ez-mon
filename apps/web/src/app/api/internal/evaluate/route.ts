@@ -205,6 +205,7 @@ async function sendTelegram(
       text: message,
       parse_mode: "Markdown",
     }),
+    signal: AbortSignal.timeout(3000),
   });
   if (!resp.ok) {
     const body = await resp.text();
@@ -237,6 +238,7 @@ async function sendDiscord(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(3000),
   });
   if (!resp.ok) {
     const body2 = await resp.text();
@@ -261,6 +263,7 @@ async function sendWebhook(
     method: "POST",
     headers,
     body: JSON.stringify({ message, timestamp: new Date().toISOString() }),
+    signal: AbortSignal.timeout(3000),
   });
   if (!resp.ok) {
     const body = await resp.text();
@@ -547,7 +550,7 @@ async function runCloudChecks(): Promise<{ processedCount: number }> {
      WHERE cm.status = 'active'
        AND (cm.next_check_at IS NULL OR cm.next_check_at <= NOW())
      ORDER BY cm.next_check_at ASC
-     LIMIT 20`
+     LIMIT 50`
   );
 
   const monitors = result.rows as unknown as MonitorRow[];
@@ -599,27 +602,37 @@ async function runCloudChecks(): Promise<{ processedCount: number }> {
 
   if (successfulChecks.length === 0) return { processedCount: 0 };
 
-  // 1. Insert check results
-  await Promise.allSettled(
-    successfulChecks.map(({ monitor, checkResult }) =>
-      queryDb(
-        `INSERT INTO cloud_check_results
-           (id, monitor_id, status, http_status, latency_ms, error, keyword_found, tls_days_remaining, checked_at)
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, NOW())`,
-        [
-          monitor.id,
-          checkResult.status,
-          checkResult.httpStatus,
-          checkResult.latencyMs,
-          checkResult.error,
-          checkResult.keywordFound,
-          checkResult.tlsDaysRemaining,
-        ]
-      ).catch((e) =>
-        console.error(`[cloud] Insert result failed for ${monitor.name}:`, e)
-      )
-    )
-  );
+  // 1. Bulk Insert check results (Single query for ultra fast execution)
+  const valueRows: string[] = [];
+  const params: unknown[] = [];
+  let paramIdx = 1;
+
+  for (const { monitor, checkResult } of successfulChecks) {
+    valueRows.push(
+      `(gen_random_uuid(), $${paramIdx}, $${paramIdx + 1}, $${paramIdx + 2}, $${paramIdx + 3}, $${paramIdx + 4}, $${paramIdx + 5}, $${paramIdx + 6}, NOW())`
+    );
+    params.push(
+      monitor.id,
+      checkResult.status,
+      checkResult.httpStatus,
+      checkResult.latencyMs,
+      checkResult.error,
+      checkResult.keywordFound,
+      checkResult.tlsDaysRemaining
+    );
+    paramIdx += 7;
+  }
+
+  try {
+    await queryDb(
+      `INSERT INTO cloud_check_results
+         (id, monitor_id, status, http_status, latency_ms, error, keyword_found, tls_days_remaining, checked_at)
+       VALUES ${valueRows.join(", ")}`,
+      params
+    );
+  } catch (e) {
+    console.error("[cloud] Bulk insert cloud_check_results failed:", e);
+  }
 
   // 2. Update monitor state
   const prevStatusMap = new Map<string, string>();
