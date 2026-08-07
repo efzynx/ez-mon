@@ -8,7 +8,7 @@
 
 import { useEffect, useState, useCallback, use } from "react";
 import { useRouter } from "next/navigation";
-import { Server, Activity, MemoryStick, HardDrive, Cpu, Terminal, ArrowLeft, RefreshCw, Clock, Trash2, Loader2, X, AlertTriangle, Copy, Check, Box, Tags, Plus, Pencil } from "lucide-react";
+import { Server, Activity, MemoryStick, HardDrive, Cpu, Terminal, ArrowLeft, RefreshCw, Clock, Trash2, Loader2, X, AlertTriangle, Copy, Check, Box, Tags, Plus, Pencil, ArrowUpCircle } from "lucide-react";
 import Link from "next/link";
 import type { DashboardOverview, DashboardAgent } from "@ezmon/shared";
 
@@ -18,6 +18,17 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { AgentCharts } from "./AgentCharts";
 import { AgentLocationMap } from "./AgentLocationMap";
+import { UpdateAgentModal } from "@/components/update-agent-modal";
+
+const HUB_VERSION = "0.1.10";
+
+function isOutdatedVersion(agentVer?: string | null, hubVer = HUB_VERSION) {
+  if (!agentVer) return false;
+  const cleanAgent = agentVer.replace(/^v/, "").trim();
+  const cleanHub = hubVer.replace(/^v/, "").trim();
+  if (cleanAgent === "dev" || cleanAgent === "vdev") return false;
+  return cleanAgent !== cleanHub;
+}
 
 export default function AgentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -39,6 +50,8 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
   const [showNameModal, setShowNameModal] = useState(false);
   const [editingName, setEditingName] = useState("");
   const [savingName, setSavingName] = useState(false);
+  
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
 
   const fetchAgent = useCallback(async () => {
     try {
@@ -210,6 +223,15 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
           </div>
           
           <div className="flex gap-3">
+            {isOutdatedVersion(agent.version) && (
+              <Button
+                variant="outline"
+                onClick={() => setShowUpdateModal(true)}
+                className="gap-2 border-amber-500/40 text-amber-400 hover:bg-amber-500/10 hover:border-amber-500/60"
+              >
+                <ArrowUpCircle size={16} /> Update Agent
+              </Button>
+            )}
             <Button 
               variant="outline"
               onClick={fetchAgent}
@@ -239,7 +261,18 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
           </div>
           <div className="flex items-center gap-2">
             <span className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Version:</span>
-            <span className="font-mono text-foreground text-sm">v{agent.version || '0.0.0'}</span>
+            <span className="font-mono text-foreground text-sm">
+              {agent.version ? (agent.version.startsWith("v") ? agent.version : `v${agent.version}`) : "v0.1.9"}
+            </span>
+            {isOutdatedVersion(agent.version) && (
+              <Badge
+                onClick={() => setShowUpdateModal(true)}
+                className="cursor-pointer bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border-amber-500/30 text-[10px] gap-1 font-mono"
+              >
+                <ArrowUpCircle size={12} className="text-amber-400" />
+                Update Available ({HUB_VERSION.startsWith("v") ? HUB_VERSION : `v${HUB_VERSION}`})
+              </Badge>
+            )}
           </div>
           {agent.state?.containersRunning !== undefined && agent.state?.containersRunning !== null && (
             <div className="flex items-center gap-2">
@@ -591,6 +624,15 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
       </div>
+    )}
+    {/* Update Agent Modal */}
+    {showUpdateModal && agent && (
+      <UpdateAgentModal
+        agentName={agent.name}
+        currentVersion={agent.version || "0.0.0"}
+        latestVersion={HUB_VERSION}
+        onClose={() => setShowUpdateModal(false)}
+      />
     )}
     </>
   );

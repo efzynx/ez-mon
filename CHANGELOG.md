@@ -9,6 +9,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## v0.1.10 — 2026-08-07
+
+### Added
+- **Agent Outdated Version Detection** — Introduced automatic agent vs hub version comparison logic across dashboard views.
+- **Update Agent Modal Component** — Created `UpdateAgentModal` UI displaying installed version vs latest hub version (`v0.1.10`), 1-click update command snippet, and in-place upgrade guidance.
+- **Update Agent Toolbar & Badges** — Added an "Update Agent" button in the Agent Detail toolbar and "Update Available" badges on both detail and table views for outdated nodes.
+
+### Fixed
+- **Registration Token UI Fallback** — Added `regToken || projectId` fallback logic in `InstallModal` to guarantee token containers never render empty.
+- **Database Schema Execution** — Applied PostgreSQL migration creating `agent_registration_tokens` table and indexes.
+- **Local Source Build Version Injection** — Injected `-ldflags="-w -s -X main.Version=${BUILD_VERSION}"` into `install.sh` when building agent binaries locally from source.
+
+---
+
 ## v0.1.9 — 2026-08-07
 
 ### Security
