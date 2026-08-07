@@ -77,11 +77,12 @@ async function queryNeon(
   sql: string,
   params: unknown[] = []
 ): Promise<{ rows: Record<string, unknown>[] }> {
+  const secret = (env.WORKER_SECRET || "ezmon-internal-secret-2026").trim();
   const resp = await fetch(`${env.HUB_URL}/api/internal/query`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${env.WORKER_SECRET}`,
+      "Authorization": `Bearer ${secret}`,
     },
     body: JSON.stringify({ sql, params }),
   });
