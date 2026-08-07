@@ -719,10 +719,17 @@ async function runCloudChecks(env: Env): Promise<void> {
     );
   });
 
-  // Kami mengupdate tabel cloud_monitors dan mengambil kembali status lamanya
-  let updateRes: { rows: any[] } = { rows: [] };
+  // ── Simpan prev_status SEBELUM update dari data original query ──────────
+  // (Tidak menggunakan RETURNING subquery karena subquery berjalan SETELAH
+  // UPDATE sehingga selalu return nilai baru, bukan nilai lama)
+  const prevStatusMap = new Map<string, string>();
+  successfulChecks.forEach(({ monitor }) => {
+    prevStatusMap.set(monitor.id, monitor.last_status);
+  });
+
+  // Kami mengupdate tabel cloud_monitors
   try {
-    updateRes = await queryNeon(
+    await queryNeon(
       env,
       `UPDATE cloud_monitors AS c
        SET last_status = v.last_status,
@@ -732,19 +739,13 @@ async function runCloudChecks(env: Env): Promise<void> {
            tls_expires_at = COALESCE(v.tls_expires_at, c.tls_expires_at),
            updated_at = NOW()
        FROM (VALUES ${updateValues.join(", ")}) AS v(id, last_status, last_latency_ms, next_check_at, tls_expires_at)
-       WHERE c.id = v.id
-       RETURNING c.id, (SELECT last_status FROM cloud_monitors WHERE id = c.id) AS prev_status`,
+       WHERE c.id = v.id`,
       updateParams
     );
+    console.log(`[cloud] Batch UPDATE ${successfulChecks.length} monitors OK`);
   } catch (e) {
     console.error("[cloud] Batch UPDATE failed:", e);
   }
-
-  // Buat lookup untuk prev_status
-  const prevStatusMap = new Map<string, string>();
-  updateRes.rows.forEach((row: any) => {
-    if (row.id && row.prev_status) prevStatusMap.set(row.id, row.prev_status);
-  });
 
   // ── DETEKSI TRANSISI ──────────────────────────────────────────────────────
   for (const { monitor, checkResult } of successfulChecks) {
