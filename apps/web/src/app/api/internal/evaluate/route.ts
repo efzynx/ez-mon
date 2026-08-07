@@ -545,8 +545,7 @@ async function runCloudChecks(): Promise<{ processedCount: number }> {
      FROM cloud_monitors cm
      JOIN projects p ON cm.project_id = p.id
      WHERE cm.status = 'active'
-       AND cm.next_check_at IS NOT NULL
-       AND cm.next_check_at <= NOW()
+       AND (cm.next_check_at IS NULL OR cm.next_check_at <= NOW())
      ORDER BY cm.next_check_at ASC
      LIMIT 20`
   );
