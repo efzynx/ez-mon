@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { sql } from "@ezmon/db";
 
+export const maxDuration = 60;
+
 /**
  * POST / GET /api/internal/evaluate
  *
@@ -397,11 +399,12 @@ async function runHttpCheck(
   timeoutSec: number
 ): Promise<CheckResult> {
   const startMs = Date.now();
+  const effectiveTimeoutMs = Math.min(timeoutSec || 3, 4) * 1000;
   try {
     const resp = await fetch(url, {
       method: "HEAD",
       redirect: "follow",
-      signal: AbortSignal.timeout(timeoutSec * 1000),
+      signal: AbortSignal.timeout(effectiveTimeoutMs),
     });
     const latencyMs = Date.now() - startMs;
     const expected = expectedStatus ?? null;
@@ -434,11 +437,12 @@ async function runTlsCheck(
   timeoutSec: number
 ): Promise<CheckResult> {
   const startMs = Date.now();
+  const effectiveTimeoutMs = Math.min(timeoutSec || 3, 4) * 1000;
   try {
     const resp = await fetch(url, {
       method: "HEAD",
       redirect: "follow",
-      signal: AbortSignal.timeout(timeoutSec * 1000),
+      signal: AbortSignal.timeout(effectiveTimeoutMs),
     });
     const latencyMs = Date.now() - startMs;
 
@@ -505,11 +509,12 @@ async function runKeywordCheck(
   timeoutSec: number
 ): Promise<CheckResult> {
   const startMs = Date.now();
+  const effectiveTimeoutMs = Math.min(timeoutSec || 3, 4) * 1000;
   try {
     const resp = await fetch(url, {
       method: "GET",
       redirect: "follow",
-      signal: AbortSignal.timeout(timeoutSec * 1000),
+      signal: AbortSignal.timeout(effectiveTimeoutMs),
     });
     const latencyMs = Date.now() - startMs;
     const text = await resp.text();
