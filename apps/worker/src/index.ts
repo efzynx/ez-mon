@@ -615,7 +615,8 @@ async function runKeywordCheck(
  * - Retention check_results dilakukan di Step 5 (30 hari)
  */
 async function runCloudChecks(env: Env): Promise<void> {
-  // Ambil monitor aktif yang sudah waktunya dicek — max 50 per run untuk safety
+  // Ambil monitor aktif yang sudah waktunya dicek — max 20 per run
+  // (Cron tiap menit → 31 monitor diproses dalam 2x run, aman dari subrequest limit)
   const result = await queryNeon(
     env,
     `SELECT cm.id, cm.project_id, cm.name, cm.url, cm.type, cm.interval_sec, cm.timeout_sec, cm.keyword, cm.expected_status, cm.last_status, p.name as project_name
@@ -625,7 +626,7 @@ async function runCloudChecks(env: Env): Promise<void> {
        AND cm.next_check_at IS NOT NULL
        AND cm.next_check_at <= NOW()
      ORDER BY cm.next_check_at ASC
-     LIMIT 50`
+     LIMIT 20`
   );
 
   const monitors = result.rows as unknown as MonitorRow[];
