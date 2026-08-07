@@ -458,7 +458,7 @@ async function runTlsCheck(
     try {
       const hostname = new URL(url).hostname;
       const crtResp = await fetch(`https://crt.sh/?q=${hostname}&output=json`, {
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(2000),
       });
       if (crtResp.ok) {
         const certs = (await crtResp.json()) as Array<{ not_after: string }>;
