@@ -84,7 +84,7 @@ fi
 # ─── Path 1: build from source (monorepo + Go available) ──────────────────────
 if [ -n "$MONOREPO_AGENT_DIR" ] && command -v go > /dev/null 2>&1; then
 
-  BUILD_VERSION="${EZMON_AGENT_VERSION:-0.1.11}"
+  BUILD_VERSION="${EZMON_AGENT_VERSION:-0.1.12}"
   info "Building from source: $MONOREPO_AGENT_DIR (version $BUILD_VERSION)"
   cd "$MONOREPO_AGENT_DIR"
   info "Running go mod tidy..."
@@ -159,7 +159,7 @@ info "Registering agent with hub..."
 OS_NAME=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH_NAME=$(uname -m)
 
-AGENT_VERSION="${EZMON_AGENT_VERSION:-0.1.11}"
+AGENT_VERSION="${EZMON_AGENT_VERSION:-0.1.12}"
 REG_RESPONSE=$(curl -s -X POST "$SERVER_URL/api/agent/register" \
   -H "Content-Type: application/json" \
   -d "{\"projectToken\":\"$EZMON_TOKEN\",\"hostname\":\"$(hostname)\",\"os\":\"$OS_NAME\",\"arch\":\"$ARCH_NAME\",\"version\":\"$AGENT_VERSION\",\"name\":\"$AGENT_NAME\"}" 2>&1)

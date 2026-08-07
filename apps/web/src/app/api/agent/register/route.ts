@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHash, randomBytes } from "crypto";
 import { db } from "@/lib/db";
 import { agents, projects, agentRegistrationTokens, eq, and } from "@ezmon/db";
-import { registerAgentSchema } from "@ezmon/shared";
-import { DEFAULTS } from "@ezmon/shared";
+import { registerAgentSchema, DEFAULTS, computeOfflineDeadline } from "@ezmon/shared";
 
 // Hash agent token with SHA-256 (faster than bcrypt, fine for random tokens)
 function hashToken(token: string): string {
@@ -93,20 +92,31 @@ export async function POST(req: NextRequest) {
     const agentToken = `agt_${randomBytes(32).toString("hex")}`;
     const tokenHash = hashToken(agentToken);
 
+    const now = new Date();
+    const initialDeadline = computeOfflineDeadline(
+      now,
+      existingHost[0]?.heartbeatIntervalSec || DEFAULTS.HEARTBEAT_INTERVAL_SEC,
+      existingHost[0]?.graceMultiplier || DEFAULTS.GRACE_MULTIPLIER
+    );
+
     let result;
 
     if (existingHost.length > 0) {
-      // Update existing agent and rotate token
+      // Update existing agent: Pertahankan nama kustom jika sudah ada
+      const preservedName = existingHost[0].name || name;
+
       result = await db()
         .update(agents)
         .set({
-          name,
+          name: preservedName,
           tokenHash,
           os,
           arch,
           version,
-          status: "unknown", // Reset status until first heartbeat
-          updatedAt: new Date(),
+          status: "online",
+          lastSeenAt: now,
+          offlineDeadlineAt: initialDeadline,
+          updatedAt: now,
         })
         .where(eq(agents.id, existingHost[0].id))
         .returning({
@@ -115,7 +125,7 @@ export async function POST(req: NextRequest) {
           metricsIntervalSec: agents.metricsIntervalSec,
         });
       
-      console.log(`[agent/register] Existing agent updated: ${result[0].id}`);
+      console.log(`[agent/register] Existing agent updated: ${result[0].id} (preserved name: ${preservedName})`);
     } else {
       // Check agent limit (only for new agents)
       const agentCount = await db()
@@ -130,7 +140,7 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Create new agent
+      // Create new agent with initial online status & deadline
       result = await db()
         .insert(agents)
         .values({
@@ -141,7 +151,9 @@ export async function POST(req: NextRequest) {
           os,
           arch,
           version,
-          status: "unknown",
+          status: "online",
+          lastSeenAt: now,
+          offlineDeadlineAt: initialDeadline,
           heartbeatIntervalSec: DEFAULTS.HEARTBEAT_INTERVAL_SEC,
           graceMultiplier: DEFAULTS.GRACE_MULTIPLIER,
           metricsIntervalSec: DEFAULTS.METRICS_INTERVAL_SEC,

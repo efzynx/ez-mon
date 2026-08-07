@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Copy, Check, X, ArrowUpCircle, Server, ShieldCheck, Key, Clock, RefreshCw } from "lucide-react";
+import { Copy, Check, X, ArrowUpCircle, Server, ShieldCheck, Key, Clock, RefreshCw, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function UpdateAgentModal({
@@ -19,6 +19,7 @@ export function UpdateAgentModal({
 }) {
   const [cmdCopied, setCmdCopied] = useState(false);
   const [tokenCopied, setTokenCopied] = useState(false);
+  const [updated, setUpdated] = useState(false);
 
   const [regToken, setRegToken] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
@@ -78,6 +79,32 @@ export function UpdateAgentModal({
     return () => clearInterval(interval);
   }, [expiresAt]);
 
+  // Poll setiap 4 detik untuk mendeteksi bahwa versi agent telah ter-update
+  useEffect(() => {
+    const poll = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/dashboard/overview?projectId=${projectId}`);
+        const data = await res.json();
+        if (!data.success || !data.data) return;
+        const targetAgent = data.data.agents?.find(
+          (a: any) => a.name === agentName || a.id === agentName
+        );
+        if (targetAgent && targetAgent.version) {
+          const cleanVer = targetAgent.version.replace(/^v/, "").trim();
+          const cleanLatest = latestVersion.replace(/^v/, "").trim();
+          if (cleanVer === cleanLatest) {
+            setUpdated(true);
+            clearInterval(poll);
+            setTimeout(() => onClose(), 2000);
+          }
+        }
+      } catch {
+        /* silent */
+      }
+    }, 4000);
+    return () => clearInterval(poll);
+  }, [projectId, agentName, latestVersion, onClose]);
+
   function copyCmd() {
     navigator.clipboard.writeText(updateCmd);
     setCmdCopied(true);
@@ -124,155 +151,174 @@ export function UpdateAgentModal({
         </div>
 
         <div className="p-6 overflow-y-auto space-y-5">
-          {/* Version Comparison Card */}
-          <div className="grid grid-cols-2 gap-4 bg-muted/40 border border-border rounded-lg p-4">
-            <div className="space-y-1">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Installed Version
-              </span>
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-mono font-bold text-amber-400">
-                  {formattedCurrent}
-                </span>
-                <span className="text-xs bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/20 font-medium">
-                  Outdated
-                </span>
+          {/* Status Updated Banner */}
+          {updated ? (
+            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-5 flex items-center gap-4 animate-in fade-in">
+              <div className="w-10 h-10 flex items-center justify-center bg-emerald-500/20 rounded-full shrink-0">
+                <Activity size={18} className="text-emerald-500" />
               </div>
-            </div>
-            <div className="space-y-1 border-l border-border pl-4">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Latest Hub Version
-              </span>
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-mono font-bold text-emerald-400">
-                  {formattedLatest}
-                </span>
-                <span className="text-xs bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20 font-medium">
-                  Recommended
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Update Command Block */}
-          <div className="bg-background border border-border rounded-lg overflow-hidden shadow-sm">
-            <div className="bg-muted/50 border-b border-border px-4 py-3 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Server size={16} className="text-primary" />
-                <h3 className="font-semibold text-sm text-foreground">
-                  Run update command on target host
+              <div>
+                <h3 className="font-semibold text-sm text-emerald-400">
+                  Agent Updated Successfully!
                 </h3>
-              </div>
-              <div className="flex gap-1.5">
-                <div className="w-3 h-3 rounded-full bg-muted-foreground/30" />
-                <div className="w-3 h-3 rounded-full bg-muted-foreground/30" />
-                <div className="w-3 h-3 rounded-full bg-muted-foreground/30" />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Agent is now running version {formattedLatest}. Closing dialog automatically...
+                </p>
               </div>
             </div>
-            <div className="p-5 bg-zinc-950 relative group flex flex-col gap-4">
-              <div className="relative bg-black border border-zinc-800 rounded-md p-4 overflow-x-auto">
-                <pre className="text-sm text-zinc-300 font-mono whitespace-pre">
-                  <span className="text-blue-400">curl</span> <span className="text-zinc-400">-fsSL</span>{" "}
-                  <span className="text-emerald-400">{appUrl}/install.sh</span>{" "}
-                  <span className="text-zinc-500">|</span>{" "}
-                  <span className="text-purple-400">EZMON_SERVER_URL</span>
-                  <span className="text-zinc-300">=</span>
-                  <span className="text-emerald-400">{appUrl}</span>{" "}
-                  <span className="text-blue-400">sh</span>
-                </pre>
-                <Button
-                  size="icon"
-                  variant="outline"
-                  onClick={copyCmd}
-                  className="absolute top-2 right-2 h-8 w-8 bg-zinc-900 border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  {cmdCopied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* One-Time Registration Token & Timer Card for Update */}
-          <div className="bg-background border border-border rounded-lg p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Key size={16} className="text-primary" />
-                <span className="text-xs font-semibold text-foreground uppercase tracking-wider">
-                  Registration Token for Terminal Prompt
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                {isExpired ? (
-                  <span className="text-xs font-medium text-destructive bg-destructive/10 px-2.5 py-1 rounded-full border border-destructive/20">
-                    Expired
+          ) : (
+            <>
+              {/* Version Comparison Card */}
+              <div className="grid grid-cols-2 gap-4 bg-muted/40 border border-border rounded-lg p-4">
+                <div className="space-y-1">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Installed Version
                   </span>
-                ) : (
-                  <div className="flex items-center gap-1.5 text-xs font-mono font-medium text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
-                    <Clock size={12} className="animate-spin text-emerald-400" />
-                    <span>{timeFormatted}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg font-mono font-bold text-amber-400">
+                      {formattedCurrent}
+                    </span>
+                    <span className="text-xs bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/20 font-medium">
+                      Outdated
+                    </span>
                   </div>
-                )}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={fetchRegToken}
-                  disabled={loadingToken}
-                  className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                  title="Generate new token"
-                >
-                  <RefreshCw size={12} className={loadingToken ? "animate-spin" : ""} />
-                </Button>
+                </div>
+                <div className="space-y-1 border-l border-border pl-4">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Latest Hub Version
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg font-mono font-bold text-emerald-400">
+                      {formattedLatest}
+                    </span>
+                    <span className="text-xs bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20 font-medium">
+                      Recommended
+                    </span>
+                  </div>
+                </div>
               </div>
-            </div>
 
-            <div className="flex items-center justify-between bg-muted/40 border border-border/80 rounded-md p-3 font-mono text-sm">
-              {loadingToken ? (
-                <span className="text-xs text-muted-foreground animate-pulse">Generating token...</span>
-              ) : isExpired ? (
-                <span className="text-xs text-destructive">
-                  Token expired. Click refresh to generate a new token.
-                </span>
-              ) : (
-                <span className="text-orange-300 font-bold select-all tracking-wider">
-                  {activeToken}
-                </span>
-              )}
+              {/* Update Command Block */}
+              <div className="bg-background border border-border rounded-lg overflow-hidden shadow-sm">
+                <div className="bg-muted/50 border-b border-border px-4 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Server size={16} className="text-primary" />
+                    <h3 className="font-semibold text-sm text-foreground">
+                      Run update command on target host
+                    </h3>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <div className="w-3 h-3 rounded-full bg-muted-foreground/30" />
+                    <div className="w-3 h-3 rounded-full bg-muted-foreground/30" />
+                    <div className="w-3 h-3 rounded-full bg-muted-foreground/30" />
+                  </div>
+                </div>
+                <div className="p-5 bg-zinc-950 relative group flex flex-col gap-4">
+                  <div className="relative bg-black border border-zinc-800 rounded-md p-4 overflow-x-auto">
+                    <pre className="text-sm text-zinc-300 font-mono whitespace-pre">
+                      <span className="text-blue-400">curl</span> <span className="text-zinc-400">-fsSL</span>{" "}
+                      <span className="text-emerald-400">{appUrl}/install.sh</span>{" "}
+                      <span className="text-zinc-500">|</span>{" "}
+                      <span className="text-purple-400">EZMON_SERVER_URL</span>
+                      <span className="text-zinc-300">=</span>
+                      <span className="text-emerald-400">{appUrl}</span>{" "}
+                      <span className="text-blue-400">sh</span>
+                    </pre>
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      onClick={copyCmd}
+                      className="absolute top-2 right-2 h-8 w-8 bg-zinc-900 border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      {cmdCopied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                    </Button>
+                  </div>
+                </div>
+              </div>
 
-              {!isExpired && !loadingToken && activeToken && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    navigator.clipboard.writeText(activeToken);
-                    setTokenCopied(true);
-                    setTimeout(() => setTokenCopied(false), 2000);
-                  }}
-                  className="h-7 text-xs bg-background border-border text-foreground hover:bg-muted"
-                >
-                  {tokenCopied ? (
-                    <>
-                      <Check size={12} className="mr-1 text-emerald-400" /> Copied
-                    </>
+              {/* One-Time Registration Token & Timer Card for Update */}
+              <div className="bg-background border border-border rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Key size={16} className="text-primary" />
+                    <span className="text-xs font-semibold text-foreground uppercase tracking-wider">
+                      Registration Token for Terminal Prompt
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {isExpired ? (
+                      <span className="text-xs font-medium text-destructive bg-destructive/10 px-2.5 py-1 rounded-full border border-destructive/20">
+                        Expired
+                      </span>
+                    ) : (
+                      <div className="flex items-center gap-1.5 text-xs font-mono font-medium text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+                        <Clock size={12} className="animate-spin text-emerald-400" />
+                        <span>{timeFormatted}</span>
+                      </div>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={fetchRegToken}
+                      disabled={loadingToken}
+                      className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                      title="Generate new token"
+                    >
+                      <RefreshCw size={12} className={loadingToken ? "animate-spin" : ""} />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between bg-muted/40 border border-border/80 rounded-md p-3 font-mono text-sm">
+                  {loadingToken ? (
+                    <span className="text-xs text-muted-foreground animate-pulse">Generating token...</span>
+                  ) : isExpired ? (
+                    <span className="text-xs text-destructive">
+                      Token expired. Click refresh to generate a new token.
+                    </span>
                   ) : (
-                    <>
-                      <Copy size={12} className="mr-1" /> Copy Token
-                    </>
+                    <span className="text-orange-300 font-bold select-all tracking-wider">
+                      {activeToken}
+                    </span>
                   )}
-                </Button>
-              )}
-            </div>
-            <p className="text-[11px] text-muted-foreground leading-normal">
-              When prompted <code className="font-mono text-foreground bg-muted px-1 py-0.5 rounded">Enter EZMON Project Token:</code> in your SSH terminal, paste this token.
-            </p>
-          </div>
 
-          {/* Safe Update Info */}
-          <div className="flex items-start gap-3 bg-emerald-500/10 border border-emerald-500/20 rounded-md p-3">
-            <ShieldCheck size={16} className="text-emerald-400 mt-0.5 shrink-0" />
-            <p className="text-xs text-emerald-200/80 leading-relaxed">
-              <strong>In-Place Safe Upgrade:</strong> The script will download the latest binary, verify its SHA-256 integrity hash, and smoothly restart the <code className="font-mono bg-emerald-950/60 px-1 rounded border border-emerald-500/20">ezmon-agent.service</code> without losing your agent registration.
-            </p>
-          </div>
+                  {!isExpired && !loadingToken && activeToken && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        navigator.clipboard.writeText(activeToken);
+                        setTokenCopied(true);
+                        setTimeout(() => setTokenCopied(false), 2000);
+                      }}
+                      className="h-7 text-xs bg-background border-border text-foreground hover:bg-muted"
+                    >
+                      {tokenCopied ? (
+                        <>
+                          <Check size={12} className="mr-1 text-emerald-400" /> Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={12} className="mr-1" /> Copy Token
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-normal">
+                  When prompted <code className="font-mono text-foreground bg-muted px-1 py-0.5 rounded">Enter EZMON Project Token:</code> in your SSH terminal, paste this token.
+                </p>
+              </div>
+
+              {/* Safe Update Info */}
+              <div className="flex items-start gap-3 bg-emerald-500/10 border border-emerald-500/20 rounded-md p-3">
+                <ShieldCheck size={16} className="text-emerald-400 mt-0.5 shrink-0" />
+                <p className="text-xs text-emerald-200/80 leading-relaxed">
+                  <strong>In-Place Safe Upgrade:</strong> The script will download the latest binary, verify its SHA-256 integrity hash, and smoothly restart the <code className="font-mono bg-emerald-950/60 px-1 rounded border border-emerald-500/20">ezmon-agent.service</code> without resetting your custom agent name or settings.
+                </p>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

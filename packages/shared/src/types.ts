@@ -112,15 +112,21 @@ export function computeDerivedStatus(
   lastSeenAt: Date | string | null
 ): AgentStatus {
   if (!lastSeenAt) return "unknown";
-  if (!offlineDeadlineAt) return "unknown";
-
-  const deadline =
-    typeof offlineDeadlineAt === "string"
-      ? new Date(offlineDeadlineAt)
-      : offlineDeadlineAt;
 
   const now = new Date();
-  return now > deadline ? "offline" : "online";
+
+  if (offlineDeadlineAt) {
+    const deadline =
+      typeof offlineDeadlineAt === "string"
+        ? new Date(offlineDeadlineAt)
+        : offlineDeadlineAt;
+    return now > deadline ? "offline" : "online";
+  }
+
+  // Fallback: Jika offlineDeadlineAt null tetapi lastSeenAt baru (< 5 menit) → online
+  const lastSeen = typeof lastSeenAt === "string" ? new Date(lastSeenAt) : lastSeenAt;
+  const ageMs = now.getTime() - lastSeen.getTime();
+  return ageMs < 5 * 60 * 1000 ? "online" : "offline";
 }
 
 /**

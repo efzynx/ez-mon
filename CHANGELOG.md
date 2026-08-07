@@ -9,6 +9,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## v0.1.12 — 2026-08-07
+
+### Added
+- **Update Modal Auto-Detection Polling** — Integrated background polling to `UpdateAgentModal` checking `/api/dashboard/overview` and displaying a green success banner upon version match, auto-closing the dialog.
+
+### Fixed
+- **Preserved Custom Agent Name** — Updated `register/route.ts` to preserve custom edited agent names upon re-registration or update instead of overwriting with default hostname.
+- **Fixed False Offline/Unknown Status** — Initialized `status: "online"`, `lastSeenAt: now`, and `offlineDeadlineAt: initialDeadline` immediately upon agent registration/update in `register/route.ts`.
+- **Enhanced Status Calculation** — Added fallback to `computeDerivedStatus` in `@ezmon/shared` returning `"online"` if `offlineDeadlineAt` is null but `lastSeenAt` is recent (< 5 minutes).
+
+---
+
 ## v0.1.11 — 2026-08-07
 
 ### Added
