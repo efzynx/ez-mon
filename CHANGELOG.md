@@ -11,7 +11,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## v0.1.14 — 2026-08-07
 
+### Added
+- **Internal Next.js Evaluator API Route** — Created `/api/internal/evaluate` endpoint in `apps/web` running agent heartbeat overdue/recovery detection, cloud checks (HTTP, TLS, Keyword), and database retention cleanups directly in Next.js Serverless runtime.
+- **Upstash QStash Cron Support** — Enabled scheduled HTTP trigger integration with Upstash QStash using `Upstash-Forward-Authorization: Bearer <CRON_SECRET>` headers.
+
 ### Improved
+- **Architecture Simplification** — Consolidated full monitoring stack into 1 Vercel App + Neon Postgres, eliminating mandatory Cloudflare Worker infrastructure.
+- **Standardized Environment Security** — Standardized internal API authentication on `CRON_SECRET`, deprecating legacy `WORKER_SECRET` references.
 - **Specific Version Tag Download Priority** — Enhanced `install.sh` to prioritize downloading agent binaries directly from versioned release tag URLs (`/releases/download/v0.1.14/...`) before falling back to the rolling `latest` URL, avoiding GitHub CDN caching delays during release workflow runs.
 
 ---
