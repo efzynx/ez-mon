@@ -84,7 +84,7 @@ fi
 # ─── Path 1: build from source (monorepo + Go available) ──────────────────────
 if [ -n "$MONOREPO_AGENT_DIR" ] && command -v go > /dev/null 2>&1; then
 
-  BUILD_VERSION="${EZMON_AGENT_VERSION:-0.1.12}"
+  BUILD_VERSION="${EZMON_AGENT_VERSION:-0.1.13}"
   info "Building from source: $MONOREPO_AGENT_DIR (version $BUILD_VERSION)"
   cd "$MONOREPO_AGENT_DIR"
   info "Running go mod tidy..."
@@ -159,7 +159,7 @@ info "Registering agent with hub..."
 OS_NAME=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH_NAME=$(uname -m)
 
-AGENT_VERSION="${EZMON_AGENT_VERSION:-0.1.12}"
+AGENT_VERSION="${EZMON_AGENT_VERSION:-0.1.13}"
 REG_RESPONSE=$(curl -s -X POST "$SERVER_URL/api/agent/register" \
   -H "Content-Type: application/json" \
   -d "{\"projectToken\":\"$EZMON_TOKEN\",\"hostname\":\"$(hostname)\",\"os\":\"$OS_NAME\",\"arch\":\"$ARCH_NAME\",\"version\":\"$AGENT_VERSION\",\"name\":\"$AGENT_NAME\"}" 2>&1)
@@ -200,7 +200,7 @@ ok "Configuration saved."
 
 # ─── Install systemd service ──────────────────────────────────────────────────
 if command -v systemctl > /dev/null 2>&1; then
-  info "Installing systemd service..."
+  info "Configuring & restarting systemd service..."
   SERVICE_CONTENT="[Unit]
 Description=EZMON Monitoring Agent
 After=network-online.target
@@ -219,15 +219,19 @@ StandardError=journal
 WantedBy=multi-user.target"
 
   if [ "$(id -u)" = "0" ]; then
+    systemctl stop ezmon-agent 2>/dev/null || true
     printf "%s\n" "$SERVICE_CONTENT" > "$SERVICE_FILE"
     systemctl daemon-reload
-    systemctl enable --now ezmon-agent
+    systemctl enable ezmon-agent
+    systemctl restart ezmon-agent
   else
+    sudo systemctl stop ezmon-agent 2>/dev/null || true
     echo "$SERVICE_CONTENT" | sudo tee "$SERVICE_FILE" > /dev/null
     sudo systemctl daemon-reload
-    sudo systemctl enable --now ezmon-agent
+    sudo systemctl enable ezmon-agent
+    sudo systemctl restart ezmon-agent
   fi
-  ok "Service ezmon-agent is active and enabled."
+  ok "Service ezmon-agent is active and updated."
 
   echo ""
   printf "${GREEN}${BOLD}✓ Installation complete!${RESET}\n"

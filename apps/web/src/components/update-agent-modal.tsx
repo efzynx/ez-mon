@@ -79,7 +79,9 @@ export function UpdateAgentModal({
     return () => clearInterval(interval);
   }, [expiresAt]);
 
-  // Poll setiap 4 detik untuk mendeteksi bahwa versi agent telah ter-update
+  const modalOpenedAt = useState(() => Date.now())[0];
+
+  // Poll setiap 2.5 detik untuk mendeteksi update / re-registrasi agent
   useEffect(() => {
     const poll = setInterval(async () => {
       try {
@@ -87,23 +89,26 @@ export function UpdateAgentModal({
         const data = await res.json();
         if (!data.success || !data.data) return;
         const targetAgent = data.data.agents?.find(
-          (a: any) => a.name === agentName || a.id === agentName
+          (a: any) => a.name === agentName || a.id === agentName || a.hostname === agentName
         );
-        if (targetAgent && targetAgent.version) {
-          const cleanVer = targetAgent.version.replace(/^v/, "").trim();
+        if (targetAgent) {
+          const cleanVer = (targetAgent.version || "").replace(/^v/, "").trim();
           const cleanLatest = latestVersion.replace(/^v/, "").trim();
-          if (cleanVer === cleanLatest) {
+          const lastSeenTime = targetAgent.lastSeenAt ? new Date(targetAgent.lastSeenAt).getTime() : 0;
+
+          // Terdeteksi update jika versi cocok ATAU agent mengirim heartbeat baru setelah modal dibuka
+          if (cleanVer === cleanLatest || lastSeenTime > modalOpenedAt) {
             setUpdated(true);
             clearInterval(poll);
-            setTimeout(() => onClose(), 2000);
+            setTimeout(() => onClose(), 1800);
           }
         }
       } catch {
         /* silent */
       }
-    }, 4000);
+    }, 2500);
     return () => clearInterval(poll);
-  }, [projectId, agentName, latestVersion, onClose]);
+  }, [projectId, agentName, latestVersion, onClose, modalOpenedAt]);
 
   function copyCmd() {
     navigator.clipboard.writeText(updateCmd);

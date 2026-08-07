@@ -9,6 +9,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## v0.1.13 — 2026-08-07
+
+### Added
+- **Instant Update Auto-Detection** — Enhanced `UpdateAgentModal` polling to 2.5s interval and added instant auto-detection triggered when `targetAgent.lastSeenAt > modalOpenedAt` or when agent version matches `latestVersion`.
+
+### Fixed
+- **Clean Systemd Service Stop & Restart** — Updated `install.sh` to explicitly stop existing `ezmon-agent` service (`sudo systemctl stop ezmon-agent`) before replacing the binary in `/usr/local/bin/ezmon-agent`.
+- **Force Systemd Daemon Reload & Restart** — Added explicit `sudo systemctl daemon-reload && sudo systemctl enable ezmon-agent && sudo systemctl restart ezmon-agent` step to terminate old agent processes in memory and launch the new binary process immediately.
+
+---
+
 ## v0.1.12 — 2026-08-07
 
 ### Added
