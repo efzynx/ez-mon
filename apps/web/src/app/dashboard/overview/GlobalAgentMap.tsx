@@ -112,7 +112,7 @@ export function GlobalAgentMap({ agents }: { agents: DashboardAgent[] }) {
       <CardContent className="flex-1 p-0 relative">
         <div
           ref={mapRef}
-          className="w-full h-full min-h-[350px] bg-background/50 overflow-hidden relative select-none"
+          className="w-full h-full min-h-[420px] bg-background/50 overflow-hidden relative select-none"
           onMouseLeave={() => setTooltip(null)}
         >
           <ComposableMap
