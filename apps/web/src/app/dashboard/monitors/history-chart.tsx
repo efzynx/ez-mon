@@ -132,11 +132,10 @@ function StatusTimeline({ results, intervalSec }: { results: CheckPoint[]; inter
 function LatencySparkline({ results }: { results: CheckPoint[] }) {
   const data = useMemo(() => {
     return results
-      .filter(r => r.latencyMs !== null)
-      .slice(-60) // Max 60 puntos
+      .slice(-60) // Max 60 points
       .map(r => ({
         time: new Date(r.checkedAt).getTime(),
-        latency: r.latencyMs,
+        latency: r.status === "up" && r.latencyMs !== null ? r.latencyMs : null,
         status: r.status,
       }));
   }, [results]);
@@ -145,15 +144,23 @@ function LatencySparkline({ results }: { results: CheckPoint[] }) {
     return null;
   }
 
-  const maxLatency = Math.max(...data.map(d => d.latency ?? 0));
-  const avgLatency = Math.round(data.reduce((a, b) => a + (b.latency ?? 0), 0) / data.length);
+  const validLatencies = data.filter(d => d.latency !== null).map(d => d.latency as number);
+  const maxLatency = validLatencies.length > 0 ? Math.max(...validLatencies) : 0;
+  const avgLatency = validLatencies.length > 0 ? Math.round(validLatencies.reduce((a, b) => a + b, 0) / validLatencies.length) : 0;
 
   // Custom tooltip yang minimalis
-  const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ value: number }> }) => {
+  const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ value: number | null; payload?: any }> }) => {
     if (!active || !payload?.length) return null;
+    const val = payload[0]?.value;
+    const isDown = payload[0]?.payload?.status === "down" || val === null;
+
     return (
-      <div className="bg-popover border border-border/50 rounded px-2 py-1 text-[10px] text-muted-foreground shadow-sm">
-        {payload[0]?.value}ms
+      <div className="bg-popover border border-border/50 rounded px-2 py-1 text-[10px] shadow-sm">
+        {isDown ? (
+          <span className="font-semibold text-destructive">DOWN</span>
+        ) : (
+          <span className="text-muted-foreground">{val}ms</span>
+        )}
       </div>
     );
   };
@@ -176,12 +183,14 @@ function LatencySparkline({ results }: { results: CheckPoint[] }) {
               </linearGradient>
             </defs>
             <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--muted-foreground))', strokeWidth: 1, strokeDasharray: '4 4' }} />
-            <ReferenceLine
-              y={avgLatency}
-              stroke="hsl(var(--muted-foreground))"
-              strokeDasharray="2 2"
-              strokeOpacity={0.5}
-            />
+            {avgLatency > 0 && (
+              <ReferenceLine
+                y={avgLatency}
+                stroke="hsl(var(--muted-foreground))"
+                strokeDasharray="2 2"
+                strokeOpacity={0.5}
+              />
+            )}
             <Area
               type="monotone"
               dataKey="latency"
@@ -189,6 +198,7 @@ function LatencySparkline({ results }: { results: CheckPoint[] }) {
               strokeWidth={2}
               fillOpacity={1}
               fill="url(#colorLatency)"
+              connectNulls={false}
               activeDot={{ r: 4, fill: "#0ea5e9", stroke: "hsl(var(--background))", strokeWidth: 2 }}
             />
           </AreaChart>

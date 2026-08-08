@@ -1,11 +1,13 @@
 {
   "name": "@ezmon/monorepo",
-  "version": "0.1.16",
+  "version": "0.1.19",
 
   "private": true,
   "description": "Lightweight self-hostable monitoring hub with push-based agents",
   "scripts": {
-    "dev": "turbo dev",
+    "dev": "turbo dev --filter=@ezmon/web",
+    "dev:cron": "node scripts/dev-cron.js",
+    "evaluate": "node scripts/dev-cron.js once",
     "build": "turbo build",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",

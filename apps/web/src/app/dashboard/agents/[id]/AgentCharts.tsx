@@ -60,13 +60,18 @@ function MiniCoreChart({
 }) {
   const CustomTooltip = ({ active, payload, label: lbl }: any) => {
     if (active && payload && payload.length) {
+      const isGap = payload[0]?.payload?.isGap;
       const val = payload[0]?.value;
       return (
         <div className="bg-popover border border-border px-3 py-2 rounded-lg shadow-xl text-xs font-mono">
           <p className="text-muted-foreground mb-1">{payload[0]?.payload?.fullDate || lbl}</p>
-          <p style={{ color }} className="font-bold">
-            {val !== undefined && val !== null ? Number(val).toFixed(1) : "—"}%
-          </p>
+          {isGap || val === null || val === undefined ? (
+            <p className="font-bold text-destructive">Offline / Gap</p>
+          ) : (
+            <p style={{ color }} className="font-bold">
+              {Number(val).toFixed(1)}%
+            </p>
+          )}
         </div>
       );
     }
@@ -114,6 +119,7 @@ function MiniCoreChart({
                 fillOpacity={1}
                 fill={`url(#${gradientId})`}
                 dot={false}
+                connectNulls={false}
                 isAnimationActive={false}
               />
             </AreaChart>
@@ -172,8 +178,66 @@ export function AgentCharts({
           }
           if (maxCores > 0) setCoreCount(maxCores);
 
-          const formatted = result.data.map((row: any) => {
+          // Sort raw buckets by bucketStart ascending
+          const sortedBuckets = [...result.data].sort(
+            (a: any, b: any) => new Date(a.bucketStart).getTime() - new Date(b.bucketStart).getTime()
+          );
+
+          const formatted: any[] = [];
+
+          for (let i = 0; i < sortedBuckets.length; i++) {
+            const row = sortedBuckets[i];
             const date = new Date(row.bucketStart);
+            const timeMs = date.getTime();
+            const bucketSizeSec = row.bucketSizeSec || 60;
+            const maxGapMs = Math.max(bucketSizeSec * 2.5 * 1000, 2 * 60 * 1000); // 2.5x bucket size or min 2 mins
+
+            // If there's a gap between previous bucket and current bucket
+            if (i > 0) {
+              const prevDate = new Date(sortedBuckets[i - 1].bucketStart);
+              const prevMs = prevDate.getTime();
+              const gapMs = timeMs - prevMs;
+
+              if (gapMs > maxGapMs) {
+                const gapStart = new Date(prevMs + bucketSizeSec * 1000);
+                const gapEnd = new Date(timeMs - bucketSizeSec * 1000);
+
+                const nullCores: Record<string, null> = {};
+                for (let c = 0; c < maxCores; c++) {
+                  nullCores[`core_${c}`] = null;
+                }
+
+                formatted.push({
+                  time: gapStart.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                  fullDate: `${gapStart.toLocaleString()} (Offline / Gap)`,
+                  cpu: null,
+                  cpuMax: null,
+                  ram: null,
+                  disk: null,
+                  load: null,
+                  rx: null,
+                  tx: null,
+                  isGap: true,
+                  ...nullCores,
+                });
+
+                if (gapEnd.getTime() > gapStart.getTime() + bucketSizeSec * 1000) {
+                  formatted.push({
+                    time: gapEnd.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                    fullDate: `${gapEnd.toLocaleString()} (Offline / Gap)`,
+                    cpu: null,
+                    cpuMax: null,
+                    ram: null,
+                    disk: null,
+                    load: null,
+                    rx: null,
+                    tx: null,
+                    isGap: true,
+                    ...nullCores,
+                  });
+                }
+              }
+            }
 
             let cpuCoresAvg = row.cpuCoresAvg || [];
             if (typeof cpuCoresAvg === "string") {
@@ -183,23 +247,25 @@ export function AgentCharts({
 
             // Map all detected cores — null if missing in this bucket
             const coreData: Record<string, number | null> = {};
-            for (let i = 0; i < maxCores; i++) {
-              coreData[`core_${i}`] = cpuCoresAvg[i] !== undefined ? cpuCoresAvg[i] : null;
+            for (let c = 0; c < maxCores; c++) {
+              coreData[`core_${c}`] = cpuCoresAvg[c] !== undefined ? cpuCoresAvg[c] : null;
             }
 
-            return {
+            formatted.push({
               time: date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
               fullDate: date.toLocaleString(),
-              cpu: row.cpuAvg,
-              cpuMax: row.cpuMax,
-              ram: row.memAvg,
-              disk: row.diskAvg,
-              load: row.loadAvg || 0,
-              rx: row.rxSum / (row.bucketSizeSec * 1024 * 1024),
-              tx: row.txSum / (row.bucketSizeSec * 1024 * 1024),
+              cpu: row.cpuAvg !== undefined && row.cpuAvg !== null ? row.cpuAvg : null,
+              cpuMax: row.cpuMax !== undefined && row.cpuMax !== null ? row.cpuMax : null,
+              ram: row.memAvg !== undefined && row.memAvg !== null ? row.memAvg : null,
+              disk: row.diskAvg !== undefined && row.diskAvg !== null ? row.diskAvg : null,
+              load: row.loadAvg !== undefined && row.loadAvg !== null ? row.loadAvg : null,
+              rx: row.rxSum ? row.rxSum / (row.bucketSizeSec * 1024 * 1024) : 0,
+              tx: row.txSum ? row.txSum / (row.bucketSizeSec * 1024 * 1024) : 0,
+              isGap: false,
               ...coreData,
-            };
-          });
+            });
+          }
+
           setData(formatted);
           setError("");
         } else {
@@ -235,26 +301,34 @@ export function AgentCharts({
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
+      const isGap = payload[0]?.payload?.isGap;
+
       return (
         <div className="bg-popover border border-border p-3 rounded-lg shadow-xl text-sm min-w-[160px]">
           <p className="font-bold text-foreground mb-2 pb-2 border-b border-border/50 text-xs">
             {payload[0]?.payload?.fullDate || label}
           </p>
-          <div className="flex flex-col gap-1.5">
-            {payload.map((p: any, i: number) => {
-              const val = p.value !== undefined && p.value !== null ? Number(p.value).toFixed(2) : "—";
-              const unit = p.name.includes("Network") ? " MB/s" : p.name.includes("Load") ? "" : "%";
-              return (
-                <div key={i} className="flex items-center justify-between gap-4 font-mono text-[11px]">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
-                    <span className="text-muted-foreground">{p.name}</span>
+          {isGap ? (
+            <div className="py-1 text-xs font-semibold text-destructive text-center">
+              Agent Offline / No Data
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {payload.map((p: any, i: number) => {
+                const val = p.value !== undefined && p.value !== null ? Number(p.value).toFixed(2) : "—";
+                const unit = p.name.includes("Network") ? " MB/s" : p.name.includes("Load") ? "" : "%";
+                return (
+                  <div key={i} className="flex items-center justify-between gap-4 font-mono text-[11px]">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
+                      <span className="text-muted-foreground">{p.name}</span>
+                    </div>
+                    <span className="font-bold text-foreground">{p.value !== null ? `${val}${unit}` : "—"}</span>
                   </div>
-                  <span className="font-bold text-foreground">{val}{unit}</span>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       );
     }
@@ -362,8 +436,8 @@ export function AgentCharts({
                     <YAxis tick={{ fontSize: 9, fill: "currentColor", opacity: 0.4 }} tickLine={false} axisLine={false} domain={[0, 100]} tickCount={5} />
                     <Tooltip content={<CustomTooltip />} />
                     <Legend verticalAlign="top" height={30} iconType="circle" wrapperStyle={{ fontSize: 11, opacity: 0.8 }} />
-                    <Area type="monotone" name="Avg Overall CPU" dataKey="cpu" stroke="#ef4444" strokeWidth={2.5} fillOpacity={1} fill="url(#gradAllCpu)" dot={false} isAnimationActive={false} />
-                    <Line type="monotone" name="Max CPU" dataKey="cpuMax" stroke="#fca5a5" strokeWidth={1} strokeDasharray="4 3" dot={false} isAnimationActive={false} />
+                    <Area type="monotone" name="Avg Overall CPU" dataKey="cpu" stroke="#ef4444" strokeWidth={2.5} fillOpacity={1} fill="url(#gradAllCpu)" dot={false} connectNulls={false} isAnimationActive={false} />
+                    <Line type="monotone" name="Max CPU" dataKey="cpuMax" stroke="#fca5a5" strokeWidth={1} strokeDasharray="4 3" dot={false} connectNulls={false} isAnimationActive={false} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -404,7 +478,7 @@ export function AgentCharts({
                   <YAxis tick={{ fontSize: 10, fill: "currentColor", opacity: 0.5 }} tickLine={false} axisLine={false} domain={[0, 100]} />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: 12, opacity: 0.8 }} />
-                  <Area type="monotone" name="RAM Usage" dataKey="ram" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorRam)" dot={false} isAnimationActive={false} />
+                  <Area type="monotone" name="RAM Usage" dataKey="ram" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorRam)" dot={false} connectNulls={false} isAnimationActive={false} />
                 </AreaChart>
               ) : selectedMetric === "disk" ? (
                 <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -419,7 +493,7 @@ export function AgentCharts({
                   <YAxis tick={{ fontSize: 10, fill: "currentColor", opacity: 0.5 }} tickLine={false} axisLine={false} domain={[0, 100]} />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: 12, opacity: 0.8 }} />
-                  <Area type="monotone" name="Disk Usage" dataKey="disk" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorDisk)" dot={false} isAnimationActive={false} />
+                  <Area type="monotone" name="Disk Usage" dataKey="disk" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorDisk)" dot={false} connectNulls={false} isAnimationActive={false} />
                 </AreaChart>
               ) : selectedMetric === "load" ? (
                 <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -434,7 +508,7 @@ export function AgentCharts({
                   <YAxis tick={{ fontSize: 10, fill: "currentColor", opacity: 0.5 }} tickLine={false} axisLine={false} />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: 12, opacity: 0.8 }} />
-                  <Area type="monotone" name="Load Avg (1m)" dataKey="load" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorLoad)" dot={false} isAnimationActive={false} />
+                  <Area type="monotone" name="Load Avg (1m)" dataKey="load" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorLoad)" dot={false} connectNulls={false} isAnimationActive={false} />
                 </AreaChart>
               ) : (
                 <LineChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -443,8 +517,8 @@ export function AgentCharts({
                   <YAxis tick={{ fontSize: 10, fill: "currentColor", opacity: 0.5 }} tickLine={false} axisLine={false} />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: 12, opacity: 0.8 }} />
-                  <Line type="monotone" name="Network RX" dataKey="rx" stroke="#10b981" strokeWidth={2.5} dot={false} isAnimationActive={false} />
-                  <Line type="monotone" name="Network TX" dataKey="tx" stroke="#6366f1" strokeWidth={2.5} dot={false} isAnimationActive={false} />
+                  <Line type="monotone" name="Network RX" dataKey="rx" stroke="#10b981" strokeWidth={2.5} dot={false} connectNulls={false} isAnimationActive={false} />
+                  <Line type="monotone" name="Network TX" dataKey="tx" stroke="#6366f1" strokeWidth={2.5} dot={false} connectNulls={false} isAnimationActive={false} />
                 </LineChart>
               )}
             </ResponsiveContainer>

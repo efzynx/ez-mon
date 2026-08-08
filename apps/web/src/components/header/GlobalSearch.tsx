@@ -1,8 +1,8 @@
 // Tujuan: Global Search — Command Palette Modal (Mac Spotlight / Raycast style) dengan pintasan keyboard CTRL+K / CMD+K
 // Caller: Layout (apps/web/src/app/dashboard/layout.tsx) & global keyboard listener
-// Dependensi: /api/dashboard/overview (agents list), localStorage (ezmon_active_project)
+// Dependensi: /api/dashboard/overview, /api/dashboard/cloud-monitors, /api/dashboard/incidents
 // Main Functions: GlobalSearch
-// Side Effects: Listen global keydown (Ctrl+K / Cmd+K), fetch GET /api/dashboard/overview
+// Side Effects: Listen global keydown (Ctrl+K / Cmd+K), fetch search data across Agents, Cloud Monitors, & Incidents
 
 "use client";
 
@@ -20,10 +20,10 @@ import {
   MonitorCheck,
   ArrowRight,
   Loader2,
-  Command,
   User,
+  Activity,
 } from "lucide-react";
-import type { DashboardAgent } from "@ezmon/shared";
+import type { DashboardAgent, DashboardIncident } from "@ezmon/shared";
 
 // ─── Nav pages ──────────────────────────────────────────────────────────────
 
@@ -33,16 +33,25 @@ const NAV_PAGES = [
   { label: "Cloud Monitors", href: "/dashboard/monitors", icon: MonitorCheck, description: "Monitor HTTP availability, SSL certificates, & APIs" },
   { label: "Incidents Log", href: "/dashboard/incidents", icon: AlertTriangle, description: "View active and historical host downtime incidents" },
   { label: "Public Status Page", href: "/dashboard/status-page", icon: Globe, description: "Public status page accessible to teams and users" },
-  { label: "Notification Channels", href: "/dashboard/notifications", icon: Bell, description: "Configure Telegram, Discord, Email, & Webhook alerts" },
   { label: "Project Settings", href: "/dashboard/settings", icon: Settings, description: "Manage API keys, webhooks, & project configurations" },
   { label: "Profile Settings", href: "/dashboard/profile", icon: User, description: "Manage profile details, email, & password security" },
 ];
+
+interface CloudMonitorItem {
+  id: string;
+  name: string;
+  target: string;
+  type: string;
+  status: string;
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type ResultItem =
   | { kind: "page"; label: string; description: string; href: string; Icon: React.ElementType }
-  | { kind: "agent"; label: string; description: string; href: string; status: string };
+  | { kind: "agent"; label: string; description: string; href: string; status: string }
+  | { kind: "monitor"; label: string; description: string; href: string; status: string; type: string }
+  | { kind: "incident"; label: string; description: string; href: string; status: string; type: string };
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -57,10 +66,14 @@ export function GlobalSearch({ className = "", collapsed = false }: GlobalSearch
   const [modalOpen, setModalOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ResultItem[]>([]);
+  
   const [agents, setAgents] = useState<DashboardAgent[]>([]);
+  const [monitors, setMonitors] = useState<CloudMonitorItem[]>([]);
+  const [incidents, setIncidents] = useState<DashboardIncident[]>([]);
+  
   const [loading, setLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
-  
+
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -91,29 +104,43 @@ export function GlobalSearch({ className = "", collapsed = false }: GlobalSearch
     }
   }, [modalOpen]);
 
-  // Load agents list lightweight single fetch
-  const loadAgents = useCallback(async () => {
+  // Load search resources (Agents, Cloud Monitors, Incidents)
+  const loadSearchData = useCallback(async () => {
     const pid = localStorage.getItem("ezmon_active_project");
     if (!pid) return;
     try {
-      const res = await fetch(`/api/dashboard/overview?projectId=${pid}`, {
-        cache: "no-store",
-      });
-      const data = await res.json();
-      if (data.success) setAgents(data.data.agents as DashboardAgent[]);
+      const [overviewRes, monitorsRes, incidentsRes] = await Promise.all([
+        fetch(`/api/dashboard/overview?projectId=${pid}`, { cache: "no-store" }),
+        fetch(`/api/dashboard/cloud-monitors?projectId=${pid}`, { cache: "no-store" }),
+        fetch(`/api/dashboard/incidents?projectId=${pid}&status=open&limit=20`, { cache: "no-store" }),
+      ]);
+      
+      const overviewData = await overviewRes.json();
+      const monitorsData = await monitorsRes.json();
+      const incidentsData = await incidentsRes.json();
+
+      if (overviewData.success && Array.isArray(overviewData.data?.agents)) {
+        setAgents(overviewData.data.agents as DashboardAgent[]);
+      }
+      if (monitorsData.success && Array.isArray(monitorsData.data)) {
+        setMonitors(monitorsData.data);
+      }
+      if (incidentsData.success && Array.isArray(incidentsData.data)) {
+        setIncidents(incidentsData.data);
+      }
     } catch {
       // silent
     }
   }, []);
 
   useEffect(() => {
-    if (modalOpen) loadAgents();
+    if (modalOpen) loadSearchData();
     const handleProjectChange = () => {
-      if (modalOpen) loadAgents();
+      if (modalOpen) loadSearchData();
     };
     window.addEventListener("ezmon_project_changed", handleProjectChange);
     return () => window.removeEventListener("ezmon_project_changed", handleProjectChange);
-  }, [modalOpen, loadAgents]);
+  }, [modalOpen, loadSearchData]);
 
   // Search logic debounced
   useEffect(() => {
@@ -135,13 +162,15 @@ export function GlobalSearch({ className = "", collapsed = false }: GlobalSearch
     }
 
     debounceRef.current = setTimeout(() => {
-      const q = query.toLowerCase();
+      const q = query.toLowerCase().trim();
       setLoading(true);
 
+      const isDownKeyword = ["down", "offline", "error", "failed", "critical"].some((k) => k.includes(q) || q.includes(k));
+      const isUpKeyword = ["up", "online", "healthy", "ok", "normal"].some((k) => k.includes(q) || q.includes(k));
+
+      // 1. Pages
       const pageResults: ResultItem[] = NAV_PAGES.filter(
-        (p) =>
-          p.label.toLowerCase().includes(q) ||
-          p.description.toLowerCase().includes(q)
+        (p) => p.label.toLowerCase().includes(q) || p.description.toLowerCase().includes(q)
       ).map((p) => ({
         kind: "page",
         label: p.label,
@@ -150,23 +179,75 @@ export function GlobalSearch({ className = "", collapsed = false }: GlobalSearch
         Icon: p.icon,
       }));
 
+      // 2. Agents
       const agentResults: ResultItem[] = agents
-        .filter(
-          (a) =>
+        .filter((a) => {
+          const status = (a.derivedStatus ?? a.status ?? "").toLowerCase();
+          const matchesText =
             a.name.toLowerCase().includes(q) ||
             (a.hostname ?? "").toLowerCase().includes(q) ||
-            (a.tags ?? []).some((t) => t.toLowerCase().includes(q))
-        )
+            (a.tags ?? []).some((t) => t.toLowerCase().includes(q)) ||
+            status.includes(q);
+          const matchesStatusFilter = (isDownKeyword && status === "offline") || (isUpKeyword && status === "online");
+          return matchesText || matchesStatusFilter;
+        })
         .slice(0, 6)
         .map((a) => ({
           kind: "agent",
           label: a.name,
-          description: a.hostname ?? "No hostname",
+          description: a.hostname ? `${a.hostname} • ${a.os}/${a.arch}` : `${a.os}/${a.arch}`,
           href: `/dashboard/agents/${a.id}`,
           status: a.derivedStatus ?? a.status,
         }));
 
-      setResults([...pageResults, ...agentResults]);
+      // 3. Cloud Monitors
+      const monitorResults: ResultItem[] = monitors
+        .filter((m) => {
+          const status = (m.status ?? "").toLowerCase();
+          const matchesText =
+            m.name.toLowerCase().includes(q) ||
+            m.target.toLowerCase().includes(q) ||
+            m.type.toLowerCase().includes(q) ||
+            status.includes(q);
+          const matchesStatusFilter = (isDownKeyword && status === "down") || (isUpKeyword && status === "up");
+          return matchesText || matchesStatusFilter;
+        })
+        .slice(0, 6)
+        .map((m) => ({
+          kind: "monitor",
+          label: m.name,
+          description: `${m.type.toUpperCase()} • ${m.target}`,
+          href: "/dashboard/monitors",
+          status: m.status,
+          type: m.type,
+        }));
+
+      // 4. Active Incidents
+      const incidentResults: ResultItem[] = incidents
+        .filter((inc) => {
+          const name = inc.agentName ?? inc.metadata?.monitor_name ?? "";
+          const msg = inc.message ?? "";
+          const type = inc.type ?? "";
+          const status = inc.status ?? "";
+          const matchesText =
+            name.toLowerCase().includes(q) ||
+            msg.toLowerCase().includes(q) ||
+            type.toLowerCase().includes(q) ||
+            status.toLowerCase().includes(q);
+          const matchesStatusFilter = isDownKeyword && status === "open";
+          return matchesText || matchesStatusFilter;
+        })
+        .slice(0, 5)
+        .map((inc) => ({
+          kind: "incident",
+          label: inc.agentName ?? inc.metadata?.monitor_name ?? "System Alert",
+          description: `${inc.type.replace(/_/g, " ")}: ${inc.message ?? "Active downtime incident"}`,
+          href: "/dashboard/incidents",
+          status: inc.status,
+          type: inc.type,
+        }));
+
+      setResults([...pageResults, ...agentResults, ...monitorResults, ...incidentResults]);
       setActiveIndex(0);
       setLoading(false);
     }, 150);
@@ -174,7 +255,7 @@ export function GlobalSearch({ className = "", collapsed = false }: GlobalSearch
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query, agents, modalOpen]);
+  }, [query, agents, monitors, incidents, modalOpen]);
 
   // ESC Key Listener (Capture Phase) to close search modal immediately
   useEffect(() => {
@@ -236,7 +317,7 @@ export function GlobalSearch({ className = "", collapsed = false }: GlobalSearch
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Type a command or search (agents, pages, settings)..."
+              placeholder="Search agents, monitors, errors (up/down), pages..."
               className="w-full bg-transparent text-sm md:text-base font-medium text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
             />
             {loading && <Loader2 className="h-4 w-4 text-primary animate-spin shrink-0" />}
@@ -253,7 +334,7 @@ export function GlobalSearch({ className = "", collapsed = false }: GlobalSearch
           </div>
 
           {/* Results / Suggestions List */}
-          <div className="max-h-80 overflow-y-auto py-2">
+          <div className="max-h-96 overflow-y-auto py-2">
             {results.length === 0 ? (
               <div className="px-4 py-8 text-center text-sm text-muted-foreground">
                 No results for &ldquo;{query}&rdquo;
@@ -317,7 +398,7 @@ export function GlobalSearch({ className = "", collapsed = false }: GlobalSearch
                           const isOnline = item.status === "online";
                           return (
                             <button
-                              key={item.href}
+                              key={item.href + item.label}
                               type="button"
                               onClick={() => navigate(item.href)}
                               onMouseEnter={() => setActiveIndex(idx)}
@@ -332,7 +413,7 @@ export function GlobalSearch({ className = "", collapsed = false }: GlobalSearch
                                   <Server className="h-4 w-4 text-muted-foreground" />
                                   <span
                                     className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-background ${
-                                      isOnline ? "bg-emerald-500" : "bg-muted-foreground/40"
+                                      isOnline ? "bg-emerald-500" : "bg-destructive"
                                     }`}
                                   />
                                 </div>
@@ -345,9 +426,108 @@ export function GlobalSearch({ className = "", collapsed = false }: GlobalSearch
                                 className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
                                   isOnline
                                     ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-                                    : "bg-muted text-muted-foreground border-border/50"
+                                    : "bg-destructive/10 text-destructive border-destructive/20"
                                 }`}
                               >
+                                {item.status}
+                              </span>
+                            </button>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Group: Cloud Monitors */}
+                {results.some((r) => r.kind === "monitor") && (
+                  <div>
+                    <p className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 border-t border-border/40 pt-2">
+                      Cloud Monitors
+                    </p>
+                    <div className="space-y-0.5">
+                      {results
+                        .filter((r) => r.kind === "monitor")
+                        .map((item) => {
+                          if (item.kind !== "monitor") return null;
+                          const idx = results.indexOf(item);
+                          const isActive = idx === activeIndex;
+                          const isUp = item.status === "up";
+                          return (
+                            <button
+                              key={item.href + item.label}
+                              type="button"
+                              onClick={() => navigate(item.href)}
+                              onMouseEnter={() => setActiveIndex(idx)}
+                              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left transition-all ${
+                                isActive
+                                  ? "bg-primary/10 text-primary font-semibold border border-primary/20"
+                                  : "text-foreground hover:bg-muted/50 border border-transparent"
+                              }`}
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="relative shrink-0">
+                                  <MonitorCheck className="h-4 w-4 text-muted-foreground" />
+                                  <span
+                                    className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-background ${
+                                      isUp ? "bg-emerald-500" : "bg-destructive"
+                                    }`}
+                                  />
+                                </div>
+                                <div className="flex flex-col min-w-0">
+                                  <span className="text-xs font-semibold truncate">{item.label}</span>
+                                  <span className="text-[11px] text-muted-foreground truncate">{item.description}</span>
+                                </div>
+                              </div>
+                              <span
+                                className={`text-[10px] font-mono px-2 py-0.5 rounded-full border uppercase ${
+                                  isUp
+                                    ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                                    : "bg-destructive/10 text-destructive border-destructive/20"
+                                }`}
+                              >
+                                {item.status}
+                              </span>
+                            </button>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Group: Active Incidents */}
+                {results.some((r) => r.kind === "incident") && (
+                  <div>
+                    <p className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-destructive/90 border-t border-border/40 pt-2 flex items-center gap-1.5">
+                      <AlertTriangle size={12} />
+                      Active Incidents
+                    </p>
+                    <div className="space-y-0.5">
+                      {results
+                        .filter((r) => r.kind === "incident")
+                        .map((item) => {
+                          if (item.kind !== "incident") return null;
+                          const idx = results.indexOf(item);
+                          const isActive = idx === activeIndex;
+                          return (
+                            <button
+                              key={item.href + item.label + item.description}
+                              type="button"
+                              onClick={() => navigate(item.href)}
+                              onMouseEnter={() => setActiveIndex(idx)}
+                              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left transition-all ${
+                                isActive
+                                  ? "bg-destructive/10 text-destructive font-semibold border border-destructive/20"
+                                  : "text-foreground hover:bg-muted/50 border border-transparent"
+                              }`}
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+                                <div className="flex flex-col min-w-0">
+                                  <span className="text-xs font-semibold truncate">{item.label}</span>
+                                  <span className="text-[11px] text-muted-foreground truncate">{item.description}</span>
+                                </div>
+                              </div>
+                              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-destructive/10 text-destructive border border-destructive/20 font-bold uppercase">
                                 {item.status}
                               </span>
                             </button>
@@ -399,24 +579,20 @@ export function GlobalSearch({ className = "", collapsed = false }: GlobalSearch
 
   return (
     <>
-      {/* Search Input Trigger Button (for Sidebar / UI bar) */}
       <button
         type="button"
         onClick={() => setModalOpen(true)}
-        className={`w-full bg-muted/40 hover:bg-muted/70 border border-border/60 rounded-xl py-2 px-3 flex items-center justify-between text-xs text-muted-foreground transition-all cursor-pointer shadow-xs group ${className}`}
+        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl bg-muted/40 hover:bg-muted/60 border border-border/60 text-xs text-muted-foreground hover:text-foreground transition-all cursor-pointer group ${className}`}
       >
-        <div className="flex items-center gap-2.5 truncate">
-          <Search size={15} className="text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
-          <span className="truncate">Quick search...</span>
+        <div className="flex items-center gap-2">
+          <Search size={14} className="text-muted-foreground group-hover:text-primary transition-colors" />
+          <span className="font-medium truncate">Search...</span>
         </div>
-        <kbd className="hidden sm:flex items-center gap-0.5 text-[10px] font-mono font-medium text-muted-foreground/70 bg-background/80 border border-border/60 px-1.5 py-0.5 rounded shadow-2xs shrink-0">
-          <Command size={10} /> K
+        <kbd className="text-[10px] font-mono bg-background/80 border border-border/80 px-1.5 py-0.5 rounded text-muted-foreground/80 group-hover:text-foreground transition-colors shadow-2xs">
+          CTRL+K
         </kbd>
       </button>
-
-      {/* Mac Spotlight / Raycast Style Command Palette Modal rendered via Portal */}
       {renderModal()}
     </>
   );
 }
-

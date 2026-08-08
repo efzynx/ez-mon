@@ -104,3 +104,55 @@ export async function GET(req: NextRequest) {
     );
   }
 }
+
+// ─── DELETE — Delete incident by ID or clear resolved incidents ───────────────
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { searchParams } = req.nextUrl;
+    const projectId = searchParams.get("projectId");
+    const incidentId = searchParams.get("id");
+    const clearResolved = searchParams.get("clearResolved") === "true";
+
+    if (!projectId) {
+      return NextResponse.json({ success: false, error: "projectId is required" }, { status: 400 });
+    }
+
+    // Verify project ownership (Rule 14)
+    const project = await db()
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.userId, session.user.id)))
+      .limit(1);
+
+    if (project.length === 0) {
+      return NextResponse.json({ success: false, error: "Project not found" }, { status: 404 });
+    }
+
+    if (clearResolved) {
+      await db()
+        .delete(incidents)
+        .where(and(eq(incidents.projectId, projectId), eq(incidents.status, "resolved")));
+      return NextResponse.json({ success: true, message: "Cleared all resolved incidents" });
+    }
+
+    if (!incidentId) {
+      return NextResponse.json({ success: false, error: "incidentId is required" }, { status: 400 });
+    }
+
+    await db()
+      .delete(incidents)
+      .where(and(eq(incidents.id, incidentId), eq(incidents.projectId, projectId)));
+
+    return NextResponse.json({ success: true, message: "Incident deleted" });
+  } catch (error) {
+    console.error("[dashboard/incidents] DELETE Error:", error);
+    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
+  }
+}
+

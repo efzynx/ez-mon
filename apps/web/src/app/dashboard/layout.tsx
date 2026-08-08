@@ -93,13 +93,6 @@ const mainNavItems = [
     badge: "PUBLIC",
     description: "Public status page accessible to teams and customers.",
   },
-  {
-    href: "/dashboard/notifications",
-    label: "Notification Channels",
-    icon: Bell,
-    badge: "CHANNELS",
-    description: "Configure alert channels for Telegram, Discord, Webhooks, & Email.",
-  },
 ];
 
 function CollapsedMenuItemHover({
@@ -199,7 +192,7 @@ function CollapsedMenuItemHover({
 }
 
 
-function SidebarProjectSwitcher({ isCollapsed = false }: { isCollapsed?: boolean }) {
+function SidebarProjectSwitcher({ isCollapsed = false, closeMenu }: { isCollapsed?: boolean; closeMenu?: () => void }) {
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -281,6 +274,7 @@ function SidebarProjectSwitcher({ isCollapsed = false }: { isCollapsed?: boolean
                       localStorage.setItem("ezmon_active_project", p.id);
                       window.dispatchEvent(new CustomEvent("ezmon_project_changed", { detail: { id: p.id } }));
                       setDropdownOpen(false);
+                      if (closeMenu) closeMenu();
                     }}
                     className={`flex items-center justify-between px-2.5 py-2 rounded-lg text-xs cursor-pointer ${
                       isSelected
@@ -323,6 +317,7 @@ function SidebarProjectSwitcher({ isCollapsed = false }: { isCollapsed?: boolean
             setSelectedProject(id);
             localStorage.setItem("ezmon_active_project", id);
             window.dispatchEvent(new CustomEvent("ezmon_project_changed", { detail: { id } }));
+            if (closeMenu) closeMenu();
           }}
           className="w-full bg-background border border-border/80 rounded-lg py-1.5 px-2.5 text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 truncate transition-all cursor-pointer"
         >
@@ -437,49 +432,12 @@ function SidebarNav({
       </div>
 
       {/* Quick Search Button (Triggers CTRL+K Command Palette) */}
-      <div className={`py-2 ${isCollapsed && !isMobile ? "px-2" : "px-3"}`}>
+      <div className={`py-2 border-b border-border/40 ${isCollapsed && !isMobile ? "px-2" : "px-3"}`}>
         <GlobalSearch className="w-full" collapsed={isCollapsed && !isMobile} />
       </div>
 
-
-      {/* Quick Access Badges (Incidents Log Counter) */}
-      <div className={`py-2 border-b border-border/40 ${isCollapsed && !isMobile ? "px-2" : "px-3"}`}>
-        {(!isCollapsed || isMobile) ? (
-          <Link
-            href="/dashboard/incidents"
-            onClick={closeMenu}
-            className="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-all"
-          >
-            <div className="flex items-center gap-2.5">
-              <Inbox size={16} className="text-muted-foreground" />
-              <span>Incidents Log</span>
-            </div>
-            {openIncidentsCount > 0 ? (
-              <Badge variant="destructive" className="text-[10px] h-4 px-1.5 rounded-full font-mono">
-                {openIncidentsCount} OPEN
-              </Badge>
-            ) : (
-              <span className="text-[10px] font-mono text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full">
-                0 Incidents
-              </span>
-            )}
-          </Link>
-        ) : (
-          <CollapsedMenuItemHover
-            href="/dashboard/incidents"
-            label="Incidents Log"
-            badge={openIncidentsCount > 0 ? `${openIncidentsCount} OPEN` : "ALERTS"}
-            description="Track and respond to active host downtime incidents in real-time."
-            icon={Inbox}
-            isActive={pathname.startsWith("/dashboard/incidents")}
-            closeMenu={closeMenu}
-            badgeCount={openIncidentsCount}
-          />
-        )}
-      </div>
-
       {/* Workspace Switcher */}
-      <SidebarProjectSwitcher isCollapsed={isCollapsed && !isMobile} />
+      <SidebarProjectSwitcher isCollapsed={isCollapsed && !isMobile} closeMenu={closeMenu} />
 
       {/* Main Navigation ("Menu") */}
       <div className={`flex-1 overflow-y-auto py-3 space-y-4 ${isCollapsed && !isMobile ? "px-2" : "px-3"}`}>
@@ -490,52 +448,54 @@ function SidebarNav({
             </div>
           )}
 
-          <div className="space-y-1">
-            {mainNavItems.map((item) => {
-              const isActive =
-                pathname === item.href ||
-                (item.href !== "/dashboard" && pathname.startsWith(item.href));
-              const Icon = item.icon;
+          {mainNavItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+            const isIncidentItem = item.href === "/dashboard/incidents";
 
-              if (isCollapsed && !isMobile) {
-                return (
-                  <CollapsedMenuItemHover
-                    key={item.href}
-                    href={item.href}
-                    label={item.label}
-                    badge={item.badge}
-                    description={item.description}
-                    icon={Icon}
-                    isActive={isActive}
-                    closeMenu={closeMenu}
-                  />
-                );
-              }
-
+            if (isCollapsed && !isMobile) {
               return (
-                <Link
+                <CollapsedMenuItemHover
                   key={item.href}
                   href={item.href}
-                  onClick={closeMenu}
-                  className={`
-                    flex items-center justify-between px-3 py-2.5 transition-all duration-200 rounded-xl text-sm font-medium
-                    ${isActive
-                      ? "bg-background dark:bg-muted/50 text-foreground font-semibold shadow-xs border border-border/60"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/40 border border-transparent"
-                    }
-                  `}
-                >
-                  <div className="flex items-center gap-3">
-                    <Icon size={18} className={isActive ? "text-primary" : "text-muted-foreground"} />
-                    <span>{item.label}</span>
-                  </div>
-                  {isActive && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_rgba(14,165,233,0.8)]" />
-                  )}
-                </Link>
+                  label={item.label}
+                  badge={isIncidentItem && openIncidentsCount > 0 ? `${openIncidentsCount} OPEN` : item.badge}
+                  description={item.description}
+                  icon={Icon}
+                  isActive={isActive}
+                  closeMenu={closeMenu}
+                  badgeCount={isIncidentItem ? openIncidentsCount : undefined}
+                />
               );
-            })}
-          </div>
+            }
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={closeMenu}
+                className={`
+                  flex items-center justify-between px-3 py-2.5 transition-all duration-200 rounded-xl text-sm font-medium
+                  ${isActive
+                    ? "bg-background dark:bg-muted/50 text-foreground font-semibold shadow-xs border border-border/60"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/40 border border-transparent"
+                  }
+                `}
+              >
+                <div className="flex items-center gap-3">
+                  <Icon size={18} className={isActive ? "text-primary" : "text-muted-foreground"} />
+                  <span>{item.label}</span>
+                </div>
+                {isIncidentItem && openIncidentsCount > 0 ? (
+                  <Badge variant="destructive" className="text-[10px] h-4 px-1.5 rounded-full font-mono">
+                    {openIncidentsCount} OPEN
+                  </Badge>
+                ) : isActive ? (
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_rgba(14,165,233,0.8)]" />
+                ) : null}
+              </Link>
+            );
+          })}
         </div>
 
         {/* Preferences / Secondary Nav */}
@@ -677,6 +637,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("ezmon_sidebar_collapsed");
@@ -700,7 +661,7 @@ export default function DashboardLayout({
         {/* Desktop Sidebar */}
         <aside
           className={`fixed hidden md:flex h-full z-40 left-0 top-0 transition-all duration-300 ${
-            isCollapsed ? "w-20" : "w-80"
+            isCollapsed ? "w-20" : "w-64"
           }`}
         >
           <SidebarNav isCollapsed={isCollapsed} toggleCollapse={toggleCollapse} />
@@ -709,19 +670,19 @@ export default function DashboardLayout({
         {/* Main Content Area */}
         <div
           className={`flex flex-col flex-1 w-full transition-all duration-300 ${
-            isCollapsed ? "md:pl-20" : "md:pl-80"
+            isCollapsed ? "md:pl-20" : "md:pl-64"
           }`}
         >
           {/* Mobile Only Header Bar for Drawer Menu */}
           <div className="md:hidden flex items-center justify-between px-3 py-2.5 border-b border-border/50 bg-background/80 backdrop-blur-md sticky top-0 z-30">
             <div className="flex items-center gap-2">
-              <Sheet>
+              <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
                 <SheetTrigger render={<Button variant="ghost" size="icon" className="shrink-0 h-9 w-9 text-muted-foreground hover:text-foreground" />}>
                   <MenuIcon className="h-5 w-5" />
                   <span className="sr-only">Open Menu</span>
                 </SheetTrigger>
-                <SheetContent side="left" className="p-0 w-80 border-r-border/50 bg-background/95 backdrop-blur-xl">
-                  <SidebarNav isMobile={true} closeMenu={() => {}} />
+                <SheetContent side="left" className="p-0 w-72 border-r-border/50 bg-background/95 backdrop-blur-xl">
+                  <SidebarNav isMobile={true} closeMenu={() => setIsMobileOpen(false)} />
                 </SheetContent>
               </Sheet>
               <div className="flex items-center gap-2">
@@ -733,7 +694,7 @@ export default function DashboardLayout({
 
 
           <main className="flex-1 relative z-0 w-full overflow-x-hidden">
-            <div className="p-4 md:p-8 lg:p-10 w-full max-w-[1920px] mx-auto">
+            <div className="p-4 md:p-6 lg:p-8 w-full max-w-[1920px] mx-auto">
               {children}
             </div>
           </main>

@@ -9,6 +9,42 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## v0.1.19 — 2026-08-08
+
+### Added
+- **List & Card Grid View Modes for Agents Fleet (`/dashboard/agents`)** — Introduced interactive view mode toggle controls (List vs Cards) on the Managed Agents page with persistent preference storage in `localStorage` (`ezmon_agents_view_mode`). Includes responsive Card Grid rendering with CPU/RAM usage progress bars, ONLINE/OFFLINE status pulse badges, Docker containers count, system OS/Arch metadata, agent tags, and delete actions.
+- **Local Cron Evaluator Helpers (`dev-cron.js`)** — Created `scripts/dev-cron.js` helper script and added `"dev:cron"` (recurring 60s ping) and `"evaluate"` (single instant trigger) npm scripts in root `package.json` for local evaluator testing.
+
+### Improved
+- **Visual Disconnection of Metric History Charts During Downtime** — Configured `AgentCharts.tsx` and `history-chart.tsx` to detect time gaps (gap > 2.5x bucket size) and set `connectNulls={false}` across all Recharts `<Area>` and `<Line>` components. Metric lines now visually break during agent or monitor downtime instead of drawing false continuous lines. Tooltips now display "Offline / Gap" or "DOWN" badges on downtime datapoints.
+- **Mobile Sidebar Navigation Auto-Close** — Added `isMobileOpen` state control to `DashboardLayout` (`apps/web/src/app/dashboard/layout.tsx`) and wired `closeMenu` callback so the mobile sidebar drawer automatically closes/minimizes upon clicking any navigation link or workspace switcher.
+
+### Removed
+- **Legacy Cloudflare Worker Package** — Removed obsolete `apps/worker` directory and worker deployment workflow (`.agents/workflows/deploy-worker.md`), updating local dev command to `"dev": "turbo dev --filter=@ezmon/web"`.
+
+---
+
+## v0.1.18 — 2026-08-08
+
+### Improved
+- **Consolidated Sidebar Navigation** — Removed redundant `Notification Channels` menu item from sidebar navigation (`mainNavItems`) and Spotlight search suggestions (`NAV_PAGES`) since notification channels are already managed under Project Settings (`/dashboard/settings`).
+- **Seamless Router Redirect** — Configured `/dashboard/notifications` to automatically perform a Next.js `redirect("/dashboard/settings")` to handle legacy URLs gracefully.
+
+---
+
+## v0.1.17 — 2026-08-08
+
+### Added
+- **Dedicated Notifications Page Router (`/dashboard/notifications`)** — Created dedicated Notification Channels page at `apps/web/src/app/dashboard/notifications/page.tsx` rendering `AlertChannelsManagement`, resolving 404 router errors.
+- **Single & Bulk Incident Deletion** — Added `DELETE /api/dashboard/incidents` route handler supporting single incident deletion by ID and bulk clearing of resolved incidents, accompanied by UI Trash icon buttons on incident cards and header clear action.
+- **Multi-Resource Command Palette Search (`CTRL + K`)** — Enhanced Spotlight search (`GlobalSearch.tsx`) to query across Agents Fleet, Cloud Monitors, Incidents Log, and condition keywords (`up`, `down`, `error`, `offline`, `online`).
+
+### Improved
+- **Consolidated Sidebar Navigation** — Removed redundant Quick Access Badges block so that only a single primary `Incidents Log` link exists in the main navigation sidebar.
+- **Sidebar & Main Content Layout Spacing** — Optimized desktop sidebar width from `w-80` (320px) to `w-64` (256px) and main container padding (`p-4 md:p-6 lg:p-8`), bringing main content closer to the left sidebar.
+
+---
+
 ## v0.1.16 — 2026-08-08
 
 ### Added

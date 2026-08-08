@@ -7,11 +7,13 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { AlertTriangle, CheckCircle, Filter, Globe, ExternalLink } from "lucide-react";
+import { AlertTriangle, CheckCircle, Filter, Globe, ExternalLink, Trash2, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import type { DashboardIncident } from "@ezmon/shared";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 type FilterStatus = "all" | "open" | "resolved";
 
@@ -38,6 +40,8 @@ export default function IncidentsPage() {
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [clearingResolved, setClearingResolved] = useState(false);
 
   // Load projects once on mount
   useEffect(() => {
@@ -99,6 +103,52 @@ export default function IncidentsPage() {
     return () => window.removeEventListener("ezmon_project_changed", handleProjectChange as EventListener);
   }, [fetchIncidents]);
 
+  // Delete single incident
+  const handleDeleteIncident = async (incidentId: string) => {
+    if (!selectedProject) return;
+    setDeletingId(incidentId);
+    try {
+      const res = await fetch(`/api/dashboard/incidents?projectId=${selectedProject}&id=${incidentId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIncidents((prev) => prev.filter((i) => i.id !== incidentId));
+        toast.success("Incident record deleted");
+      } else {
+        toast.error(data.error || "Failed to delete incident");
+      }
+    } catch {
+      toast.error("Network error");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  // Clear all resolved incidents
+  const handleClearResolved = async () => {
+    if (!selectedProject) return;
+    setClearingResolved(true);
+    try {
+      const res = await fetch(`/api/dashboard/incidents?projectId=${selectedProject}&clearResolved=true`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIncidents((prev) => prev.filter((i) => i.status !== "resolved"));
+        toast.success("All resolved incidents cleared");
+      } else {
+        toast.error(data.error || "Failed to clear resolved incidents");
+      }
+    } catch {
+      toast.error("Network error");
+    } finally {
+      setClearingResolved(false);
+    }
+  };
+
+  const hasResolvedIncidents = incidents.some((i) => i.status === "resolved");
+
   return (
     <div className="space-y-6 animate-fade-in w-full pb-12">
       {/* Header */}
@@ -117,6 +167,22 @@ export default function IncidentsPage() {
           </p>
         </div>
 
+        {hasResolvedIncidents && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleClearResolved}
+            disabled={clearingResolved}
+            className="text-xs border-border/80 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-all rounded-xl"
+          >
+            {clearingResolved ? (
+              <Loader2 size={14} className="animate-spin mr-1.5" />
+            ) : (
+              <Trash2 size={14} className="mr-1.5" />
+            )}
+            Clear Resolved Incidents
+          </Button>
+        )}
       </div>
 
       {/* Filter Tabs */}
@@ -211,34 +277,51 @@ export default function IncidentsPage() {
 
                   {/* Content */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 mb-1 flex-wrap">
-                      {/* Nama: agent name atau monitor name dari metadata */}
-                      <p className="font-semibold text-foreground truncate">
-                        {incident.agentName
-                          ?? incident.metadata?.monitor_name
-                          ?? "Unknown"}
-                      </p>
-                      <Badge
-                        className={`uppercase text-[10px] tracking-wider font-bold shrink-0 ${
-                          isOpen
-                            ? "bg-destructive/10 text-destructive hover:bg-destructive/20 border-destructive/20"
-                            : "bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border-emerald-500/20"
-                        }`}
-                      >
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
-                            isOpen ? "bg-destructive animate-pulse" : "bg-emerald-500"
+                    <div className="flex items-center justify-between gap-3 mb-1">
+                      <div className="flex items-center gap-3 flex-wrap min-w-0">
+                        {/* Nama: agent name atau monitor name dari metadata */}
+                        <p className="font-semibold text-foreground truncate">
+                          {incident.agentName
+                            ?? incident.metadata?.monitor_name
+                            ?? "Unknown"}
+                        </p>
+                        <Badge
+                          className={`uppercase text-[10px] tracking-wider font-bold shrink-0 ${
+                            isOpen
+                              ? "bg-destructive/10 text-destructive hover:bg-destructive/20 border-destructive/20"
+                              : "bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border-emerald-500/20"
                           }`}
-                        />
-                        {incident.status}
-                      </Badge>
-                      {/* Badge Cloud Monitor jika tidak ada agent */}
-                      {!incident.agentId && incident.metadata?.monitor_name && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
-                          <Globe size={9} />
-                          Cloud Monitor
-                        </span>
-                      )}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
+                              isOpen ? "bg-destructive animate-pulse" : "bg-emerald-500"
+                            }`}
+                          />
+                          {incident.status}
+                        </Badge>
+                        {/* Badge Cloud Monitor jika tidak ada agent */}
+                        {!incident.agentId && incident.metadata?.monitor_name && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                            <Globe size={9} />
+                            Cloud Monitor
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Delete Incident Button */}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteIncident(incident.id)}
+                        disabled={deletingId === incident.id}
+                        className="text-muted-foreground hover:text-destructive p-1.5 rounded-lg hover:bg-destructive/10 transition-colors shrink-0 ml-2"
+                        title="Delete incident record"
+                      >
+                        {deletingId === incident.id ? (
+                          <Loader2 size={15} className="animate-spin text-destructive" />
+                        ) : (
+                          <Trash2 size={15} />
+                        )}
+                      </button>
                     </div>
 
                     {/* Monitor URL jika cloud monitor */}

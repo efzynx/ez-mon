@@ -85,7 +85,7 @@ npm --prefix apps/web run dev`;
           >
             <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
             <span className="text-xs font-semibold tracking-wider uppercase text-primary group-hover:text-primary transition-colors">
-              Stable Version v0.1.16 Available
+              Stable Version v0.1.18 Available
             </span>
           </motion.div>
 

@@ -7,7 +7,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Server, Plus, Activity, X, Trash2, Loader2, Box, Tags } from "lucide-react";
+import { Server, Plus, Activity, X, Trash2, Loader2, Box, Tags, LayoutGrid, LayoutList } from "lucide-react";
 import Link from "next/link";
 import type { DashboardAgent } from "@ezmon/shared";
 
@@ -32,11 +32,24 @@ export default function AgentsPage() {
   const [showInstall, setShowInstall] = useState(false);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"list" | "card">("list");
 
   const [showTagsModal, setShowTagsModal] = useState(false);
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [editingTags, setEditingTags] = useState("");
   const [savingTags, setSavingTags] = useState(false);
+
+  useEffect(() => {
+    const savedMode = localStorage.getItem("ezmon_agents_view_mode") as "list" | "card" | null;
+    if (savedMode === "list" || savedMode === "card") {
+      setViewMode(savedMode);
+    }
+  }, []);
+
+  const toggleViewMode = (mode: "list" | "card") => {
+    setViewMode(mode);
+    localStorage.setItem("ezmon_agents_view_mode", mode);
+  };
 
   useEffect(() => {
     async function fetchProjects() {
@@ -149,6 +162,33 @@ export default function AgentsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="flex items-center bg-muted/60 p-1 rounded-lg border border-border/60">
+            <button
+              onClick={() => toggleViewMode("list")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                viewMode === "list"
+                  ? "bg-background text-foreground shadow-sm font-semibold"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              title="List View (Table)"
+            >
+              <LayoutList size={15} />
+              <span className="hidden sm:inline">List</span>
+            </button>
+            <button
+              onClick={() => toggleViewMode("card")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                viewMode === "card"
+                  ? "bg-background text-foreground shadow-sm font-semibold"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              title="Card Grid View"
+            >
+              <LayoutGrid size={15} />
+              <span className="hidden sm:inline">Cards</span>
+            </button>
+          </div>
+
           <Button
             onClick={() => setShowInstall(true)}
             disabled={!selectedProject}
@@ -161,11 +201,19 @@ export default function AgentsPage() {
       </div>
 
       {loading ? (
-        <div className="space-y-3 mt-8">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="skeleton h-20 rounded-xl bg-card border border-border" />
-          ))}
-        </div>
+        viewMode === "card" ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-8">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="skeleton h-56 rounded-xl bg-card border border-border" />
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-3 mt-8">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="skeleton h-20 rounded-xl bg-card border border-border" />
+            ))}
+          </div>
+        )
       ) : agents.length === 0 ? (
         <Card className="mt-8">
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
@@ -187,6 +235,139 @@ export default function AgentsPage() {
             </Button>
           </CardContent>
         </Card>
+      ) : viewMode === "card" ? (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {agents.map((agent) => {
+              const isOnline = agent.derivedStatus === "online";
+              const cpuPct = agent.state?.cpuPct || 0;
+              const ramPct =
+                agent.state?.memUsedMb && agent.state?.memTotalMb
+                  ? (agent.state.memUsedMb / agent.state.memTotalMb) * 100
+                  : 0;
+
+              return (
+                <Card
+                  key={agent.id}
+                  onClick={() => (window.location.href = `/dashboard/agents/${agent.id}`)}
+                  className={`group cursor-pointer hover:border-primary/50 transition-all duration-200 hover:shadow-md relative overflow-hidden flex flex-col justify-between ${
+                    !isOnline ? "bg-destructive/[0.02] border-destructive/20" : ""
+                  }`}
+                >
+                  <CardContent className="p-5 space-y-4 flex-1 flex flex-col justify-between">
+                    <div>
+                      {/* Card Header */}
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className={`p-2 rounded-lg ${isOnline ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                            <Server size={18} />
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className={`font-mono font-semibold text-sm truncate ${isOnline ? 'text-foreground group-hover:text-primary transition-colors' : 'text-muted-foreground'}`}>
+                              {agent.name}
+                            </h3>
+                            <p className="text-xs text-muted-foreground font-mono truncate">
+                              {agent.os}/{agent.arch}
+                            </p>
+                          </div>
+                        </div>
+                        <Badge
+                          variant={isOnline ? "default" : "destructive"}
+                          className={`uppercase text-[10px] tracking-wider font-bold shrink-0 ${
+                            isOnline
+                              ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                              : "bg-destructive/10 text-destructive border-destructive/20"
+                          }`}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
+                              isOnline ? "bg-emerald-500 animate-pulse" : "bg-destructive"
+                            }`}
+                          />
+                          {agent.derivedStatus}
+                        </Badge>
+                      </div>
+
+                      {/* Version & Tags Badges */}
+                      <div className="flex flex-wrap items-center gap-1.5 mb-4">
+                        {agent.version && agent.version.replace(/^v/, "").trim() !== "0.1.18" && agent.version !== "dev" && agent.version !== "vdev" && (
+                          <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/30 text-[9px] px-1.5 py-0 h-4 font-mono">
+                            v{agent.version.replace(/^v/, "")} ➔ v0.1.18
+                          </Badge>
+                        )}
+                        {agent.tags && agent.tags.map((tag) => (
+                          <Badge
+                            key={tag}
+                            variant="secondary"
+                            className="text-[9px] px-1.5 py-0 h-4 bg-muted/50 text-muted-foreground"
+                          >
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+
+                      {/* Metrics Section */}
+                      {isOnline ? (
+                        <div className="space-y-3 pt-2 border-t border-border/40">
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-xs font-mono">
+                              <span className="text-muted-foreground">CPU Usage</span>
+                              <span className="font-semibold text-foreground">{cpuPct.toFixed(1)}%</span>
+                            </div>
+                            <Progress value={cpuPct} className={`h-1.5 ${cpuPct > 85 ? '[&>div]:bg-destructive' : ''}`} />
+                          </div>
+
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-xs font-mono">
+                              <span className="text-muted-foreground">RAM Usage</span>
+                              <span className="font-semibold text-foreground">{ramPct.toFixed(1)}%</span>
+                            </div>
+                            <Progress value={ramPct} className={`h-1.5 ${ramPct > 85 ? '[&>div]:bg-destructive' : ''}`} />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="py-4 text-center text-xs font-mono text-muted-foreground/60 bg-muted/20 rounded-md border border-dashed border-border/40">
+                          Host is currently offline
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer Info & Action */}
+                    <div className="pt-3 border-t border-border/40 flex items-center justify-between text-xs font-mono mt-4">
+                      <div className="flex items-center gap-3">
+                        {agent.state?.containersRunning !== undefined && agent.state?.containersRunning !== null && (
+                          <div className="flex items-center gap-1 text-blue-400" title="Containers running">
+                            <Box size={13} />
+                            <span className="font-semibold">{agent.state.containersRunning}</span>
+                          </div>
+                        )}
+                        <span className={`text-[11px] ${!isOnline ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
+                          {agent.lastSeenAt ? new Date(agent.lastSeenAt).toLocaleTimeString() : 'Never'}
+                        </span>
+                      </div>
+
+                      <button
+                        onClick={(e) => handleDelete(e, agent.id, agent.name)}
+                        disabled={deletingId === agent.id}
+                        className="p-1.5 rounded-md text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50 opacity-0 group-hover:opacity-100"
+                        title="Delete agent"
+                      >
+                        {deletingId === agent.id ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <Trash2 size={14} />
+                        )}
+                      </button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+          <div className="text-xs font-mono text-muted-foreground px-1">
+            Showing {agents.length} agent{agents.length !== 1 ? 's' : ''}
+          </div>
+        </div>
       ) : (
         <Card className="overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
@@ -241,9 +422,9 @@ export default function AgentsPage() {
                       <TableCell className="whitespace-nowrap font-mono text-xs py-4">
                         <div className="flex items-center gap-2">
                           <span className="text-muted-foreground">{agent.os}/{agent.arch}</span>
-                          {agent.version && agent.version.replace(/^v/, "").trim() !== "0.1.16" && agent.version !== "dev" && agent.version !== "vdev" && (
+                          {agent.version && agent.version.replace(/^v/, "").trim() !== "0.1.18" && agent.version !== "dev" && agent.version !== "vdev" && (
                             <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/30 text-[9px] px-1.5 py-0 h-4 font-mono">
-                              v{agent.version.replace(/^v/, "")} ➔ v0.1.16
+                              v{agent.version.replace(/^v/, "")} ➔ v0.1.18
                             </Badge>
                           )}
                         </div>
