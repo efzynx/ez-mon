@@ -10,13 +10,17 @@
 "use client";
 
 import Link from "next/link";
-import { Shield, Zap, ChevronRight, Terminal, Server, Globe, Activity } from "lucide-react";
+import { useState } from "react";
+import { Shield, Zap, ChevronRight, Terminal, Server, Globe, Activity, ExternalLink, Copy, Check, Clock, Layers, ArrowUpRight } from "lucide-react";
 import { motion, Variants } from "framer-motion";
 
 import { Button } from "@/components/ui/button";
 import { Navbar } from "@/components/navbar";
 
 export default function HomePage() {
+  const [copiedCmd, setCopiedCmd] = useState(false);
+  const [copiedEvalUrl, setCopiedEvalUrl] = useState(false);
+
   const containerVariants: Variants = {
     hidden: { opacity: 0 },
     show: {
@@ -36,6 +40,19 @@ export default function HomePage() {
       transition: { type: "spring", stiffness: 100, damping: 20 }
     },
   };
+
+  const cloneCmd = `git clone https://github.com/efzynx/ez-mon.git
+cd ez-mon
+npm install
+npm --prefix apps/web run dev`;
+
+  const copyToClipboard = (text: string, setFn: (val: boolean) => void) => {
+    navigator.clipboard.writeText(text);
+    setFn(true);
+    setTimeout(() => setFn(false), 2000);
+  };
+
+  const vercelDeployUrl = "https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fefzynx%2Fez-mon&env=DATABASE_URL,CRON_SECRET,NEXTAUTH_SECRET,NEXTAUTH_URL&envDescription=Neon%20Postgres%20DATABASE_URL%2C%20CRON_SECRET%20for%20evaluator%2C%20and%20NextAuth%20secrets&project-name=ezmon-hub&repository-name=ezmon";
 
   return (
     <div className="min-h-screen flex flex-col items-center bg-[#020617] relative overflow-hidden font-sans text-slate-200 selection:bg-primary/30">
@@ -68,7 +85,7 @@ export default function HomePage() {
           >
             <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
             <span className="text-xs font-semibold tracking-wider uppercase text-primary group-hover:text-primary transition-colors">
-              Stable Version v0.1.5 Available
+              Stable Version v0.1.16 Available
             </span>
           </motion.div>
 
@@ -96,17 +113,17 @@ export default function HomePage() {
           {/* CTAs */}
           <motion.div
             variants={itemVariants}
-            className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto mb-24"
+            className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto mb-20"
           >
-            <Link href="/register" className="w-full sm:w-auto">
-              <Button size="lg" className="w-full text-base px-8 h-14 rounded-2xl bg-primary text-primary-foreground hover:opacity-90 shadow-[0_0_40px_-10px_rgba(34,197,94,0.4)] group border-0">
-                Start Monitoring
-                <ChevronRight size={18} className="ml-2 group-hover:translate-x-1 transition-transform" />
+            <Link href={vercelDeployUrl} target="_blank" className="w-full sm:w-auto">
+              <Button size="lg" className="w-full text-base px-8 h-14 rounded-2xl bg-emerald-500 text-slate-950 font-bold hover:bg-emerald-400 shadow-[0_0_40px_-10px_rgba(34,197,94,0.5)] group border-0">
+                Deploy Hub to Vercel
+                <ArrowUpRight size={20} className="ml-2 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
               </Button>
             </Link>
-            <Link href="https://docs.ezmon.web.id" target="_blank" className="w-full sm:w-auto">
+            <Link href="#deploy-hub" className="w-full sm:w-auto">
               <Button variant="outline" size="lg" className="w-full text-base px-8 h-14 rounded-2xl bg-white/5 backdrop-blur-md border-white/10 hover:bg-white/10 hover:border-primary/50 text-slate-300 hover:text-white transition-all">
-                View Documentation
+                Self-Host Guide
               </Button>
             </Link>
           </motion.div>
@@ -114,17 +131,19 @@ export default function HomePage() {
           {/* Visual Showcase (Code/Terminal) */}
           <motion.div
             variants={itemVariants}
-            className="w-full max-w-4xl relative"
+            className="w-full max-w-4xl relative mb-24"
           >
             <div className="absolute inset-0 bg-primary/10 blur-[100px] -z-10 rounded-full" />
             <div className="rounded-2xl border border-white/10 bg-[#0f172a]/80 backdrop-blur-xl shadow-2xl overflow-hidden text-left">
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5 bg-white/5">
-                <div className="w-3 h-3 rounded-full bg-red-500/20 border border-red-500/40" />
-                <div className="w-3 h-3 rounded-full bg-amber-500/20 border border-amber-500/40" />
-                <div className="w-3 h-3 rounded-full bg-primary/20 border border-primary/40" />
-                <div className="ml-2 text-[10px] font-mono text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                  EZMON Installer
+              <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-white/5">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-red-500/20 border border-red-500/40" />
+                  <div className="w-3 h-3 rounded-full bg-amber-500/20 border border-amber-500/40" />
+                  <div className="w-3 h-3 rounded-full bg-primary/20 border border-primary/40" />
+                  <div className="ml-2 text-[10px] font-mono text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                    EZMON One-Line Agent Installer
+                  </div>
                 </div>
               </div>
               <div className="p-6 md:p-8 font-mono text-sm md:text-base leading-relaxed">
@@ -153,8 +172,193 @@ export default function HomePage() {
                 <div className="flex gap-4 mt-1">
                   <span className="text-slate-600 shrink-0 select-none">5</span>
                   <p className="text-slate-400">
-                    <span className="text-primary">✓</span> Sending metrics every 30s
+                    <span className="text-primary">✓</span> Sending metrics & heartbeats every 30s
                   </p>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+
+        {/* ─── Hub Deployment & Self-Host Section ─────────────────────────────── */}
+        <motion.div
+          id="deploy-hub"
+          className="mt-16 pt-16 border-t border-white/5 scroll-mt-24"
+          variants={containerVariants}
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: "-80px" }}
+        >
+          <div className="text-center max-w-3xl mx-auto mb-16">
+            <span className="text-xs font-bold font-mono uppercase tracking-widest text-primary bg-primary/10 border border-primary/20 px-3 py-1 rounded-full">
+              Deployment Paths
+            </span>
+            <h2 className="text-3xl md:text-5xl font-display font-extrabold text-white mt-4 mb-4">
+              Deploy Your EZMON Hub
+            </h2>
+            <p className="text-slate-400 text-base md:text-lg leading-relaxed">
+              Host your monitoring backend in seconds on Vercel with zero infrastructure maintenance, or self-host anywhere using Git.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Option 1: One-Click Vercel Deploy */}
+            <motion.div
+              variants={itemVariants}
+              className="p-8 rounded-3xl bg-gradient-to-b from-white/[0.04] to-white/[0.01] border border-white/10 backdrop-blur-md flex flex-col justify-between hover:border-emerald-500/40 transition-all group"
+            >
+              <div>
+                <div className="flex items-center justify-between gap-4 mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-2xl bg-black border border-white/10 text-white">
+                      <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
+                        <path d="M24 22.5D24 22.5 12 1.5 12 1.5D12 1.5 0 22.5 0 22.5H24Z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-white">Vercel One-Click Deploy</h3>
+                      <p className="text-xs text-slate-400">Recommended for instant serverless hub</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold font-mono px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                    FASTEST
+                  </span>
+                </div>
+
+                <p className="text-slate-300 text-sm leading-relaxed mb-6">
+                  Click below to automatically clone EZMON, provision environment variables, and deploy your Hub app to Vercel in 1 click.
+                </p>
+
+                <div className="space-y-2 mb-8 bg-black/40 border border-white/5 rounded-2xl p-4 text-xs font-mono text-slate-400">
+                  <div className="text-slate-300 font-semibold mb-1">Required Environment Variables:</div>
+                  <div className="flex items-center justify-between text-slate-400">
+                    <span>DATABASE_URL</span>
+                    <span className="text-slate-500">Neon Postgres URL</span>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-400">
+                    <span>CRON_SECRET</span>
+                    <span className="text-slate-500">Evaluator Bearer Token</span>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-400">
+                    <span>NEXTAUTH_SECRET</span>
+                    <span className="text-slate-500">Random 32-char String</span>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-400">
+                    <span>NEXTAUTH_URL</span>
+                    <span className="text-slate-500">https://your-hub.vercel.app</span>
+                  </div>
+                </div>
+              </div>
+
+              <Link href={vercelDeployUrl} target="_blank" className="w-full">
+                <Button className="w-full h-13 rounded-xl bg-white text-slate-950 hover:bg-slate-200 font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-white/5 transition-all">
+                  <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                    <path d="M24 22.5D24 22.5 12 1.5 12 1.5D12 1.5 0 22.5 0 22.5H24Z" />
+                  </svg>
+                  Deploy to Vercel Now
+                  <ExternalLink size={16} className="ml-1 opacity-70" />
+                </Button>
+              </Link>
+            </motion.div>
+
+            {/* Option 2: Self-Host via Git Clone */}
+            <motion.div
+              variants={itemVariants}
+              className="p-8 rounded-3xl bg-gradient-to-b from-white/[0.04] to-white/[0.01] border border-white/10 backdrop-blur-md flex flex-col justify-between hover:border-primary/40 transition-all group"
+            >
+              <div>
+                <div className="flex items-center justify-between gap-4 mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-2xl bg-primary/10 border border-primary/20 text-primary">
+                      <Terminal size={24} />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-white">Self-Host via Git Clone</h3>
+                      <p className="text-xs text-slate-400">Full control on your own VPS or bare-metal</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold font-mono px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary">
+                    MANUAL
+                  </span>
+                </div>
+
+                <p className="text-slate-300 text-sm leading-relaxed mb-6">
+                  Clone the monorepo repository and run locally or inside your Docker / Node.js production server.
+                </p>
+
+                <div className="relative bg-[#090d16] border border-white/10 rounded-2xl p-4 mb-8">
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(cloneCmd, setCopiedCmd)}
+                    className="absolute top-3 right-3 text-slate-400 hover:text-white p-1.5 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+                    title="Copy commands"
+                  >
+                    {copiedCmd ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                  </button>
+                  <pre className="font-mono text-xs text-emerald-400 leading-relaxed overflow-x-auto">
+                    {cloneCmd}
+                  </pre>
+                </div>
+              </div>
+
+              <Link href="https://github.com/efzynx/ez-mon" target="_blank" className="w-full">
+                <Button variant="outline" className="w-full h-13 rounded-xl bg-white/5 border-white/10 hover:bg-white/10 text-white font-semibold text-sm flex items-center justify-center gap-2">
+                  <Github size={18} />
+                  View GitHub Repository
+                  <ChevronRight size={16} className="opacity-70" />
+                </Button>
+              </Link>
+            </motion.div>
+          </div>
+
+          {/* ─── Cron-job.org / Evaluator Setup Card ──────────────────────────── */}
+          <motion.div
+            variants={itemVariants}
+            className="mt-8 p-8 rounded-3xl bg-gradient-to-r from-emerald-950/30 via-slate-900/60 to-slate-950 border border-emerald-500/20 backdrop-blur-md"
+          >
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-6 pb-6 border-b border-white/5">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                  <Clock size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white">Periodic Evaluator Setup (cron-job.org)</h3>
+                  <p className="text-xs text-slate-400">Automate host offline detection & notification dispatch every minute</p>
+                </div>
+              </div>
+              <Link href="https://cron-job.org" target="_blank">
+                <Button variant="outline" size="sm" className="rounded-xl border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 font-mono text-xs">
+                  Open cron-job.org <ExternalLink size={14} className="ml-1.5" />
+                </Button>
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
+              <div className="p-4 rounded-2xl bg-black/40 border border-white/5">
+                <div className="text-slate-500 font-mono uppercase text-[10px] mb-1">1. Target URL</div>
+                <div className="font-mono text-slate-200 font-semibold truncate">
+                  https://&lt;your-hub&gt;/api/internal/evaluate
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-black/40 border border-white/5">
+                <div className="text-slate-500 font-mono uppercase text-[10px] mb-1">2. HTTP Method</div>
+                <div className="font-mono text-emerald-400 font-bold">
+                  POST
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-black/40 border border-white/5">
+                <div className="text-slate-500 font-mono uppercase text-[10px] mb-1">3. Authorization Header</div>
+                <div className="font-mono text-slate-200 truncate">
+                  Bearer &lt;CRON_SECRET&gt;
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-black/40 border border-white/5">
+                <div className="text-slate-500 font-mono uppercase text-[10px] mb-1">4. Schedule Interval</div>
+                <div className="font-mono text-amber-400 font-bold">
+                  Every 1 minute (* * * * *)
                 </div>
               </div>
             </div>
@@ -262,3 +466,5 @@ function Github({ size }: { size: number }) {
     </svg>
   );
 }
+
+

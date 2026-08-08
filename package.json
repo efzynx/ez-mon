@@ -1,6 +1,6 @@
 {
-  "name": "ezmon",
-  "version": "0.1.14",
+  "name": "@ezmon/monorepo",
+  "version": "0.1.16",
 
   "private": true,
   "description": "Lightweight self-hostable monitoring hub with push-based agents",
