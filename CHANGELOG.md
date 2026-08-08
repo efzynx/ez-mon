@@ -7,19 +7,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+---
+
+## v0.1.16 — 2026-08-08
+
 ### Added
-- **Profile Settings Feature & UI (`/dashboard/profile`)** — Created dedicated user Profile Settings page allowing users to view account details, update full name, and change account passwords.
-- **Email OTP Verification for Password Change (10-minute expiry)** — Implemented 6-digit OTP email verification flow for password updates (`POST /api/dashboard/profile/send-code` & `PATCH /api/dashboard/profile`). Includes real-time password match validation, 10-minute countdown timer (`09:59` to `00:00`), and Resend email service integration.
-- **Forgot Password Trigger in Profile Settings** — Added instant "Lupa Password?" trigger inside Profile Settings password card calling `POST /api/auth/forgot-password` to send reset link emails.
-- **Desktop Sidebar Collapse / Expand (Minimize & Maximize)** — Implemented desktop sidebar toggle supporting Minimized mode (`w-20` / 80px) and Maximized mode (`w-80` / 320px) with `localStorage` persistence (`ezmon_sidebar_collapsed`) and smooth dynamic auto-expansion of main content container and topbar (`md:left-80` vs `md:left-20`). Preserved mobile drawer UX untouched.
+- **Landing Page Hub Deployment Paths Section** — Created a dedicated "Deployment Paths" section on landing page (`apps/web/src/app/page.tsx`) with One-Click Vercel Deploy button and interactive self-hosting Git Clone terminal card with copy-to-clipboard functionality.
+- **Periodic Evaluator Setup Guide (cron-job.org)** — Integrated visual 4-step configuration card on landing page detailing target URL (`/api/internal/evaluate`), HTTP method (`POST`), Bearer auth token header, and 1-minute execution schedule.
+- **Official Vercel Deploy Badge & README Documentation** — Added official `[Deploy with Vercel]` button badge, required environment variables breakdown table, and step-by-step cron-job.org setup guide to `README.md`.
+
+---
+
+## v0.1.15 — 2026-08-08
+
+### Added
+- **Two-Step Registration Email OTP Verification** — Added 6-digit email OTP verification flow with 10-minute expiry for new user registrations (`POST /api/auth/register/send-code` & `POST /api/auth/register`). Includes 2-step UI flow with countdown timer and resend capability.
+- **Universal Password Visibility Toggle** — Added interactive show/hide password buttons (`Eye`/`EyeOff`) across login, register, reset-password, and profile settings forms.
+- **Raycast / Mac Spotlight Command Palette (`CTRL + K`)** — Implemented global command palette search modal rendered at document body level via React `createPortal` with instant ESC key closing and full English keyboard navigation guide.
+- **Minimized Desktop Sidebar Custom Hover Popovers** — Added floating glassmorphic popover cards (`createPortal` to `document.body`) for all collapsed desktop sidebar menu items displaying item name, icon, status badge, and localized function description.
 
 ### Improved
-- **Full-Width Responsive Dashboard & Sub-Pages** — Expanded main content container from fixed `max-w-7xl` (1280px) to dynamic full-screen width `max-w-[1920px]` with responsive padding (`px-4 md:px-8 lg:px-10`), eliminating empty screen margins across Overview, Agents, Monitors, Incidents, Status Page, Settings, and Profile views.
-- **Desktop Sidebar Overhaul (`w-80` / 320px)** — Expanded desktop sidebar width to 320px and added rich UI elements: Live status badge, active Workspace/Project Switcher Card, grouped navigation sections (`MONITORING & FLEET`, `ALERTS & PUBLIC PAGE`), and a real-time System Status Health Card widget.
-- **Instant TopBar User Name & Avatar Sync** — Updated NextAuth `jwt` & `session` callbacks in `auth.ts` to handle `trigger === "update"`, and added `ezmon_user_updated` custom window event listener in `TopAppBar` for instant avatar and name reflection upon profile edits without page reloads.
+- **UI Language Standardization** — Standardized 100% of sidebar UI text, badges, search palette modal, tooltips, and status indicators in English.
 
 ### Fixed
-- **React Rules of Hooks Order Fix** — Fixed hook execution order violation in `ProfilePage` by declaring all `useState` hooks before conditional rendering returns.
+- **Base UI Menu Group Context Fix** — Resolved Base UI `MenuGroupRootContext is missing` runtime exception in `SidebarProjectSwitcher` by wrapping `DropdownMenuLabel` in `DropdownMenuGroup`.
+- **Focus Glow Ring Cleanup** — Removed stray focus ring outlines on `SidebarProjectSwitcher` button trigger.
+- **Sidebar Hover Popover Clipping Fix** — Moved hover popovers out of the `overflow-y-auto` sidebar container using React Portal (`createPortal`) to prevent popup clipping on scrollable sidebars.
 
 ---
 

@@ -2,18 +2,24 @@
   <h1>EZMON</h1>
   <p><strong>Lightweight, self-hostable server monitoring with push-based agents</strong></p>
   <p>
+    <a href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fefzynx%2Fez-mon&env=DATABASE_URL,CRON_SECRET,NEXTAUTH_SECRET,NEXTAUTH_URL&envDescription=Neon%20Postgres%20DATABASE_URL%2C%20CRON_SECRET%20for%20evaluator%2C%20and%20NextAuth%20secrets&project-name=ezmon-hub&repository-name=ezmon">
+      <img src="https://vercel.com/button" alt="Deploy with Vercel"/>
+    </a>
+  </p>
+  <p>
     <a href="#features">Features</a> ·
     <a href="#architecture">Architecture</a> ·
     <a href="#getting-started">Getting Started</a> ·
     <a href="#agent-installation">Agent Installation</a> ·
-    <a href="#self-hosting">Self-Hosting</a> ·
+    <a href="#deploy-hub">Deploy Hub</a> ·
+    <a href="#cron-evaluator-setup">Cron Evaluator</a> ·
     <a href="#license">License</a>
   </p>
   <p>
     <img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License" />
     <img src="https://img.shields.io/badge/Next.js-16-black" alt="Next.js" />
     <img src="https://img.shields.io/badge/Go-agent-00ADD8" alt="Go" />
-    <img src="https://img.shields.io/badge/Cloudflare-Workers-F38020" alt="Cloudflare" />
+    <img src="https://img.shields.io/badge/Vercel-Deploy-black" alt="Vercel" />
   </p>
 </div>
 
@@ -23,10 +29,10 @@
 
 EZMON is an open-source server monitoring platform. A lightweight Go agent runs on your servers, pushing heartbeats and metrics to a hosted dashboard — no inbound ports required on your side.
 
-- **Dashboard** — Next.js web app (deploy on Vercel)
+- **Dashboard (Hub)** — Next.js web app (deploy on Vercel or self-host)
 - **Agent** — Single Go binary, runs as a systemd service
 - **Database** — Neon Serverless Postgres
-- **Evaluator** — Cloudflare Workers Cron (offline detection, notifications)
+- **Evaluator** — Next.js internal endpoint `/api/internal/evaluate` (triggered via cron-job.org / Upstash QStash / Workers)
 
 ---
 
@@ -53,10 +59,10 @@ EZMON is an open-source server monitoring platform. A lightweight Go agent runs 
                                                              Neon Postgres (state)
                                                                         │
                                                         ┌───────────────▼───────────────┐
-                                                        │  Evaluator (Cloudflare Worker) │
-                                                        │  cron: every 1 minute          │
-                                                        │  - detect offline agents        │
-                                                        │  - dispatch notifications        │
+                                                        │ Evaluator (/api/internal/eval) │
+                                                        │ Triggered via cron-job.org    │
+                                                        │ - detect offline agents       │
+                                                        │ - dispatch notifications       │
                                                         └───────────────────────────────┘
 ```
 
@@ -68,65 +74,78 @@ EZMON is an open-source server monitoring platform. A lightweight Go agent runs 
 
 ---
 
-## Getting Started
+## Deploy Hub
 
-### Prerequisites
+### Option 1: One-Click Vercel Deploy (Recommended)
 
-- Node.js ≥ 20
-- pnpm ≥ 9
-- Go ≥ 1.21 (for agent development)
-- [Neon](https://neon.tech) account (free tier works)
-- [Cloudflare](https://cloudflare.com) account (for Workers)
+Click the button below to clone EZMON and deploy your Hub directly to Vercel:
 
-### 1. Clone & Install
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fefzynx%2Fez-mon&env=DATABASE_URL,CRON_SECRET,NEXTAUTH_SECRET,NEXTAUTH_URL&envDescription=Neon%20Postgres%20DATABASE_URL%2C%20CRON_SECRET%20for%20evaluator%2C%20and%20NextAuth%20secrets&project-name=ezmon-hub&repository-name=ezmon)
 
-```bash
-git clone https://github.com/your-username/ezmon.git
-cd ezmon
-pnpm install
-```
+#### Required Environment Variables:
 
-### 2. Configure Environment
+| Variable | Description | Example |
+|---|---|---|
+| `DATABASE_URL` | Neon Serverless Postgres Connection String | `postgresql://user:pass@ep-xyz.neon.tech/ezmon?sslmode=require` |
+| `CRON_SECRET` | Secret token for securing `/api/internal/evaluate` | `random_secret_string_here` |
+| `NEXTAUTH_SECRET` | NextAuth session encryption secret | `random_32_character_key` |
+| `NEXTAUTH_URL` | Production Hub URL | `https://your-ezmon-hub.vercel.app` |
 
-```bash
-cp .env.example .env.local
-```
+---
 
-Edit `.env.local`:
+### Option 2: Self-Host via Git Clone
 
-```env
-# Neon Postgres
-DATABASE_URL=postgresql://...
+1. **Clone & Install Dependencies:**
 
-# NextAuth
-NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=your-secret-here
+   ```bash
+   git clone https://github.com/efzynx/ez-mon.git
+   cd ez-mon
+   npm install
+   ```
 
-# OAuth (GitHub)
-GITHUB_CLIENT_ID=...
-GITHUB_CLIENT_SECRET=...
-```
+2. **Configure Environment (`apps/web/.env.local`):**
 
-For the Cloudflare Worker, create `apps/worker/.dev.vars`:
+   ```env
+   DATABASE_URL=postgresql://...
+   NEXTAUTH_URL=http://localhost:3000
+   NEXTAUTH_SECRET=your-random-secret
+   CRON_SECRET=your-cron-secret
+   ```
 
-```env
-DATABASE_URL=postgresql://...
-```
+3. **Push Database Schema:**
 
-### 3. Push Database Schema
+   ```bash
+   npm --prefix packages/db run db:push
+   ```
 
-```bash
-pnpm db:push
-```
+4. **Run Development or Production Server:**
 
-### 4. Run Development Server
+   ```bash
+   # Development
+   npm --prefix apps/web run dev
 
-```bash
-pnpm dev
-```
+   # Production Build
+   npm --prefix apps/web run build && npm --prefix apps/web run start
+   ```
 
-- Web dashboard: http://localhost:3000
-- Worker evaluator: http://localhost:8787
+---
+
+## Setting Up Periodic Evaluator (cron-job.org)
+
+To enable automatic host offline detection and alert notifications, configure a free periodic HTTP trigger on [cron-job.org](https://cron-job.org):
+
+1. Sign up for a free account at [cron-job.org](https://cron-job.org).
+2. Click **Create Cronjob**.
+3. Fill in the job details:
+   - **Title**: `EZMON Offline Evaluator`
+   - **Address**: `https://<YOUR-HUB-DOMAIN>/api/internal/evaluate`
+   - **Schedule**: Every 1 minute (`* * * * *`)
+4. Go to **Advanced Settings**:
+   - **Request Method**: Select `POST`
+   - **HTTP Headers**: Add header:
+     - Header Name: `Authorization`
+     - Header Value: `Bearer <CRON_SECRET>`
+5. Click **Create** to save.
 
 ---
 
@@ -157,15 +176,6 @@ sudo rm -f /etc/ezmon/agent.env
 
 ---
 
-## Self-Hosting
-
-### Deploy Hub (Vercel)
-
-```bash
-# Install Vercel CLI
-npm i -g vercel
-
-# Deploy from web app
 cd apps/web
 vercel --prod
 ```

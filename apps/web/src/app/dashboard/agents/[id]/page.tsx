@@ -20,7 +20,7 @@ import { AgentCharts } from "./AgentCharts";
 import { AgentLocationMap } from "./AgentLocationMap";
 import { UpdateAgentModal } from "@/components/update-agent-modal";
 
-const HUB_VERSION = "0.1.14";
+const HUB_VERSION = "0.1.16";
 
 function isOutdatedVersion(agentVer?: string | null, hubVer = HUB_VERSION) {
   if (!agentVer) return false;
