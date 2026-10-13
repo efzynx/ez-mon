@@ -103,7 +103,7 @@ describe("Security Audit & Input Validation Unit Tests", () => {
       expect(result.success).toBe(false);
     });
 
-    it("should accept valid metrics snapshot", () => {
+    it("should accept valid metrics snapshot with piggybacked heartbeat fields", () => {
       const payload = {
         agentId: "550e8400-e29b-41d4-a716-446655440000",
         timestamp: "2026-08-07T06:00:00Z",
@@ -114,8 +114,25 @@ describe("Security Audit & Input Validation Unit Tests", () => {
         diskTotalMb: 200000,
         netRxBps: 1024,
         netTxBps: 2048,
+        version: "0.1.19",
+        uptimeSec: 3600,
+        publicIp: "103.1.2.3",
       };
       const result = metricsSchema.safeParse(payload);
+      expect(result.success).toBe(true);
+    });
+
+    it("should accept legacy metrics snapshot without piggybacked fields for backward compatibility", () => {
+      const legacyPayload = {
+        agentId: "550e8400-e29b-41d4-a716-446655440000",
+        timestamp: "2026-08-07T06:00:00Z",
+        cpuPct: 15.4,
+        memUsedMb: 2048,
+        memTotalMb: 8192,
+        diskUsedMb: 50000,
+        diskTotalMb: 200000,
+      };
+      const result = metricsSchema.safeParse(legacyPayload);
       expect(result.success).toBe(true);
     });
   });

@@ -51,6 +51,9 @@ export const metricsSchema = z.object({
   netRxBps: z.number().int().nonnegative().optional(),
   netTxBps: z.number().int().nonnegative().optional(),
   containersRunning: z.number().int().nonnegative().optional(),
+  version: z.string().optional(),
+  uptimeSec: z.number().nonnegative().optional(),
+  publicIp: z.string().optional(),
 });
 
 export type MetricsInput = z.infer<typeof metricsSchema>;

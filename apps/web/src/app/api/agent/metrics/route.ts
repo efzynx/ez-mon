@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { db } from "@/lib/db";
-import { agents, agentState, metricBuckets, eq, and, sql } from "@ezmon/db";
-import { metricsSchema, DEFAULTS } from "@ezmon/shared";
+import { agents, agentState, incidents, eq, and, sql } from "@ezmon/db";
+import {
+  metricsSchema,
+  DEFAULTS,
+  computeOfflineDeadline,
+  AGENT_STATUS,
+  INCIDENT_STATUS,
+} from "@ezmon/shared";
+import { dispatchNotification } from "@/lib/notify";
 
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
@@ -47,7 +54,15 @@ export async function POST(req: NextRequest) {
 
     // Verify agent token
     const agentResult = await db()
-      .select({ id: agents.id, projectId: agents.projectId })
+      .select({
+        id: agents.id,
+        projectId: agents.projectId,
+        name: agents.name,
+        status: agents.status,
+        version: agents.version,
+        heartbeatIntervalSec: agents.heartbeatIntervalSec,
+        graceMultiplier: agents.graceMultiplier,
+      })
       .from(agents)
       .where(and(eq(agents.id, data.agentId), eq(agents.tokenHash, tokenHash)))
       .limit(1);
@@ -59,10 +74,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const agent = agentResult[0];
     const collectedAt = new Date(data.timestamp);
+    const previousStatus = agent.status;
+    const newDeadline = computeOfflineDeadline(
+      collectedAt,
+      agent.heartbeatIntervalSec,
+      agent.graceMultiplier
+    );
 
     // 1. Upsert latest snapshot (agent_state)
-    await db()
+    const upsertState = db()
       .insert(agentState)
       .values({
         agentId: data.agentId,
@@ -99,8 +121,7 @@ export async function POST(req: NextRequest) {
     const bucketStart = getBucketStart(collectedAt, DEFAULTS.BUCKET_SIZE_SEC);
     const cpuCoresJson = data.cpuCores ? JSON.stringify(data.cpuCores) : null;
 
-    // Use raw SQL for the upsert with incremental aggregation
-    await db().execute(sql`
+    const upsertBucket = db().execute(sql`
       INSERT INTO metric_buckets (id, agent_id, bucket_start, bucket_size_sec, cpu_avg, cpu_max, cpu_cores_avg, mem_avg, disk_avg, load_avg, rx_sum, tx_sum, sample_count)
       VALUES (gen_random_uuid(), ${data.agentId}, ${bucketStart.toISOString()}, ${DEFAULTS.BUCKET_SIZE_SEC},
               ${data.cpuPct}, ${data.cpuPct}, cast(${cpuCoresJson} as json),
@@ -119,6 +140,62 @@ export async function POST(req: NextRequest) {
         tx_sum = metric_buckets.tx_sum + ${data.netTxBps ?? 0},
         sample_count = metric_buckets.sample_count + 1
     `);
+
+    // 3. Piggyback Heartbeat: Update agent liveness in DB so metrics push acts as heartbeat
+    const updateLiveness = db()
+      .update(agents)
+      .set({
+        lastSeenAt: collectedAt,
+        offlineDeadlineAt: newDeadline,
+        status: AGENT_STATUS.ONLINE,
+        version: data.version ?? agent.version,
+        updatedAt: new Date(),
+      })
+      .where(eq(agents.id, data.agentId));
+
+    // Parallelize all three independent operations to minimize function execution latency
+    await Promise.all([upsertState, upsertBucket, updateLiveness]);
+
+    // If agent was offline or unknown, mark recovery and send notification
+    if (
+      previousStatus === AGENT_STATUS.OFFLINE ||
+      previousStatus === AGENT_STATUS.UNKNOWN
+    ) {
+      const resolvedIncidents = await db()
+        .update(incidents)
+        .set({
+          status: INCIDENT_STATUS.RESOLVED,
+          resolvedAt: collectedAt,
+        })
+        .where(
+          and(
+            eq(incidents.agentId, data.agentId),
+            eq(incidents.status, INCIDENT_STATUS.OPEN),
+            eq(incidents.type, "heartbeat_missed")
+          )
+        )
+        .returning({
+          id: incidents.id,
+          projectId: incidents.projectId,
+        });
+
+      for (const inc of resolvedIncidents) {
+        const msg = `🟢 *EZMON Recovery*\nAgent *${agent.name}* is back ONLINE`;
+        dispatchNotification({
+          projectId: inc.projectId,
+          incidentId: inc.id,
+          message: msg,
+          eventType: "online",
+          templateVars: {
+            project: "Unknown Project",
+            agentOrMonitor: agent.name,
+            status: "ONLINE",
+            statusEmoji: "🟢",
+            time: new Date().toISOString(),
+          },
+        }).catch((e) => console.error("[metrics] dispatch recovery failed:", e));
+      }
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
