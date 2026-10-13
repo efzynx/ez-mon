@@ -72,9 +72,9 @@ export async function POST(req: NextRequest) {
     const geoTargetIp = agentPublicIp || clientIp;
     const isLocalhost = !geoTargetIp || geoTargetIp === "127.0.0.1" || geoTargetIp === "::1" || geoTargetIp.startsWith("192.168.") || geoTargetIp.startsWith("10.");
     const ipChanged = geoTargetIp !== agent.lastIp && geoTargetIp !== null;
-    const needsGeo = !country || lat === null || ipChanged;
+    const needsGeo = (!country || ipChanged) && !isLocalhost && Boolean(geoTargetIp);
 
-    if (needsGeo && !isLocalhost) {
+    if (needsGeo) {
       try {
         const geoRes = await fetch(`http://ip-api.com/json/${geoTargetIp}?fields=status,countryCode,city,lat,lon`);
         if (geoRes.ok) {
@@ -95,8 +95,8 @@ export async function POST(req: NextRequest) {
     if (!country) {
       country = req.headers.get("x-vercel-ip-country") || country;
       city = req.headers.get("x-vercel-ip-city") || city;
-      let latStr = req.headers.get("x-vercel-ip-latitude");
-      let lonStr = req.headers.get("x-vercel-ip-longitude");
+      const latStr = req.headers.get("x-vercel-ip-latitude");
+      const lonStr = req.headers.get("x-vercel-ip-longitude");
       lat = latStr ? parseFloat(latStr) : lat;
       lon = lonStr ? parseFloat(lonStr) : lon;
     }
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
         lastSeenAt: now,
         offlineDeadlineAt: newDeadline,
         status: AGENT_STATUS.ONLINE,
-        lastIp: clientIp,
+        lastIp: geoTargetIp || clientIp,
         country,
         city,
         lat,

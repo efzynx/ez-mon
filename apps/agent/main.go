@@ -90,6 +90,9 @@ type HeartbeatPayload struct {
 type MetricsPayload struct {
 	AgentID           string    `json:"agentId"`
 	Timestamp         string    `json:"timestamp"`
+	Version           string    `json:"version,omitempty"`
+	UptimeSec         int64     `json:"uptimeSec,omitempty"`
+	PublicIP          string    `json:"publicIp,omitempty"`
 	CpuPct            float64   `json:"cpuPct"`
 	CpuCores          []float64 `json:"cpuCores,omitempty"`
 	MemUsedMb         int64     `json:"memUsedMb"`
@@ -157,7 +160,7 @@ func main() {
 	// Initial heartbeat + metrics saat startup
 	sendHeartbeat(cfg, seq, startTime)
 	seq++
-	sendMetrics(cfg)
+	sendMetrics(cfg, startTime)
 
 	log.Printf("[ezmon-agent] Running (heartbeat=%s, metrics=%s)", cfg.HBInterval, cfg.MetInterval)
 
@@ -167,7 +170,9 @@ func main() {
 			sendHeartbeat(cfg, seq, startTime)
 			seq++
 		case <-metTicker.C:
-			sendMetrics(cfg)
+			sendMetrics(cfg, startTime)
+			// Reset heartbeat ticker to avoid redundant push since metrics payload already updates liveness
+			hbTicker.Reset(cfg.HBInterval)
 		case sig := <-sigCh:
 			log.Printf("[ezmon-agent] Received %s, shutting down", sig)
 			return
@@ -375,13 +380,16 @@ func collectMetrics() (MetricsPayload, error) {
 
 // ─── Send Metrics ─────────────────────────────────────────────────────────────
 
-func sendMetrics(cfg Config) {
+func sendMetrics(cfg Config, startTime time.Time) {
 	payload, err := collectMetrics()
 	if err != nil {
 		log.Printf("[metrics] Collection error: %v", err)
 		return
 	}
 	payload.AgentID = cfg.AgentID
+	payload.Version = Version
+	payload.UptimeSec = int64(time.Since(startTime).Seconds())
+	payload.PublicIP = getPublicIP()
 
 	body, _ := json.Marshal(payload)
 	req, _ := http.NewRequest("POST", cfg.ServerURL+"/api/agent/metrics", bytes.NewReader(body))
